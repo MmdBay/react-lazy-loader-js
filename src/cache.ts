@@ -120,21 +120,3 @@ export class LFUCache<K, V> {
 }
 
 
-// // Example Usage
-
-// // Create a new cache with a capacity of 3 items and a TTL of 1 hour (3600000 ms)
-// const lfuCache = new LFUCache<string, string>(3, 3600000);
-
-// lfuCache.set('a', 'data1');
-// lfuCache.set('b', 'data2');
-// lfuCache.set('c', 'data3');
-
-// lfuCache.displayCache(); // Cache: { 'a' => { value: 'data1', frequency: 1 }, ... }
-
-// lfuCache.get('a');        // Access 'a', so its frequency increases
-// lfuCache.set('d', 'data4'); // Cache is full, 'b' (least frequently used) will be removed
-
-// lfuCache.displayCache(); // Cache: { 'c' => { ... }, 'a' => { ... }, 'd' => { ... } }
-
-// // Clean up expired items (if any)
-// lfuCache.cleanUp();
