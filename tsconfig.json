@@ -1,0 +1,14 @@
+{
+    "compilerOptions": {
+      "target": "es5",
+      "module": "es2020",
+      "lib": ["es2020", "dom"],
+      "jsx": "react",
+      "moduleResolution": "node",
+      "esModuleInterop": true,
+      "skipLibCheck": true,
+      "strict": true
+    },
+    "include": ["src/**/*"]
+  }
+  
