@@ -17,7 +17,7 @@
 You can install the package using npm or yarn:
 
 ```bash
-npm install react-lazy-loader
+npm install react-lazy-loader-js
 ```
 
 # Usage
