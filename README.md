@@ -1,8 +1,8 @@
 # React Dynamic Retry Loader
 
-[![npm version](https://badge.fury.io/js/react-dynamic-retry-loader.svg)](https://badge.fury.io/js/react-dynamic-retry-loader)
+[![npm version](https://badge.fury.io/js/react-lazy-loader-js.svg)](https://badge.fury.io/js/react-lazy-loader-js)
 
-`react-dynamic-retry-loader` is a smart loader for dynamically imported React components with retry, caching, and priority loading mechanisms. It provides features like dynamic retries, caching of loaded components, circuit breaker logic, prefetching, and priority loading to optimize the loading of React components in your app.
+`react-lazy-loader-js` is a smart loader for dynamically imported React components with retry, caching, and priority loading mechanisms. It provides features like dynamic retries, caching of loaded components, circuit breaker logic, prefetching, and priority loading to optimize the loading of React components in your app.
 
 ## Features
 
@@ -27,7 +27,7 @@ The package provides three main utilities: retryDynamicImport, prefetchDynamicIm
 This function allows you to dynamically import a React component with retry logic and caching.
 
 ```typescript
-import { retryDynamicImport } from 'react-dynamic-retry-loader';
+import { retryDynamicImport } from 'react-lazy-loader-js';
 
 const LazyComponent = retryDynamicImport(() => import('./MyComponent'));
 
@@ -48,7 +48,7 @@ export default App;
 Use this function to prefetch components before they are needed, reducing the load time when the user navigates to that part of the app.
 
 ```typescript
-import { prefetchDynamicImport } from 'react-dynamic-retry-loader';
+import { prefetchDynamicImport } from 'react-lazy-loader-js';
 
 // Prefetch a component
 prefetchDynamicImport(() => import('./MyComponent'));
@@ -60,7 +60,7 @@ prefetchDynamicImport(() => import('./MyComponent'));
 Use priorityLoadComponent to load less important components after a delay, giving higher priority to critical components.
 
 ```typescript
-import { priorityLoadComponent } from 'react-dynamic-retry-loader';
+import { priorityLoadComponent } from 'react-lazy-loader-js';
 
 // Delay the loading of a component with a priority value (in seconds)
 priorityLoadComponent(() => import('./LowPriorityComponent'), 5);
@@ -85,7 +85,7 @@ const defaultConfig = {
 ### Example with Custom Configuration
 
 ```typescript
-import { retryDynamicImport } from 'react-dynamic-retry-loader';
+import { retryDynamicImport } from 'react-lazy-loader-js';
 
 const LazyComponent = retryDynamicImport(
   () => import('./MyComponent'),
@@ -122,7 +122,7 @@ Priority Loading: Components that are less critical can be loaded with a delay u
 ### Example with Prefetching
 
 ```typescript
-import { retryDynamicImport, prefetchDynamicImport } from 'react-dynamic-retry-loader';
+import { retryDynamicImport, prefetchDynamicImport } from 'react-lazy-loader-js';
 
 const LazyComponent = retryDynamicImport(() => import('./MyComponent'));
 
@@ -146,7 +146,7 @@ export default App;
 ### Example with Priority Loading
 
 ```typescript
-import { retryDynamicImport, priorityLoadComponent } from 'react-dynamic-retry-loader';
+import { retryDynamicImport, priorityLoadComponent } from 'react-lazy-loader-js';
 
 // Higher priority component
 const ImportantComponent = retryDynamicImport(() => import('./ImportantComponent'));
