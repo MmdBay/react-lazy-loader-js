@@ -1,8 +1,9 @@
+import { getNetworkInfo } from './networkSpeed';
 import { ComponentType, lazy } from 'react';
-import { defaultConfig, RetryConfig } from './config';
+import { getConfig, RetryConfig } from './config';
 import { getRouteComponentUrl, getRetryImportFunction } from './utils';
-import { LFUCache } from './cache';  // Import the LFU cache
-import { handleFailureWithCircuitBreaker } from './circuitBreaker';
+import { LFUCache } from './cache';
+import { CircuitBreaker } from './circuitBreaker';
 
 // Initialize LFU cache with a capacity of 5 and TTL of 1 hour
 const lfuCache = new LFUCache<string, any>(5, 3600000);
@@ -10,37 +11,43 @@ const lfuCache = new LFUCache<string, any>(5, 3600000);
 /**
  * @function retryDynamicImport
  * @description Tries to dynamically import a React component with retry logic, circuit breaker, and caching.
+ * Adjusts the retry count and delay based on the user's internet speed and connection type.
  * @param {() => Promise<{ default: T }>} importFunction - Function to dynamically import the React component.
- * @param {RetryConfig} [config=defaultConfig] - Optional configuration for retries and circuit breaker.
+ * @param {Partial<RetryConfig>} [customConfig] - Optional custom configuration for retries and circuit breaker.
  * @returns {React.LazyExoticComponent<T>} Lazy-loaded React component with retry and cache support.
  */
 export function retryDynamicImport<T extends ComponentType<any>>(
   importFunction: () => Promise<{ default: T }>,
-  config: RetryConfig = defaultConfig
+  customConfig?: Partial<RetryConfig>
 ): React.LazyExoticComponent<T> {
+  const config = getConfig(customConfig);
   let retryCount = 0;
   let hasTimedOut = false;
   const { maxRetryCount, timeoutMs } = config;
 
+  const circuitBreaker = new CircuitBreaker(config);
+
   const loadComponent = (): Promise<{ default: T }> =>
     new Promise<{ default: T }>((resolve, reject: (reason?: any) => void) => {
-      const importUrl = getRouteComponentUrl(importFunction);  // Get the URL for caching purposes
+      const { effectiveType, downlink, saveData } = getNetworkInfo();
 
-      // Check if the component is already in the cache
+      const adjustedRetryCount = downlink < 1 || effectiveType.includes('2g') ? maxRetryCount * 2 : maxRetryCount;
+      const adjustedDelay = downlink < 1 || effectiveType.includes('2g') ? config.initialRetryDelayMs * 2 : config.initialRetryDelayMs;
+
+      const importUrl = getRouteComponentUrl(importFunction);
+
       const cachedComponent = importUrl ? lfuCache.get(importUrl) : null;
 
       if (cachedComponent) {
-        resolve(cachedComponent);  // If found in cache, resolve with cached data
+        resolve(cachedComponent);
         return;
       }
 
-      // Set a timeout for the dynamic import
       const timeoutId = setTimeout(() => {
         hasTimedOut = true;
         reject(new Error('Component load timed out.'));
       }, timeoutMs);
 
-      // Try loading the component with retry logic
       function tryLoadComponent() {
         if (hasTimedOut) return;
 
@@ -50,7 +57,6 @@ export function retryDynamicImport<T extends ComponentType<any>>(
           .then((module) => {
             clearTimeout(timeoutId);
 
-            // Cache the successfully loaded component
             if (importUrl) {
               lfuCache.set(importUrl, module);
             }
@@ -60,15 +66,13 @@ export function retryDynamicImport<T extends ComponentType<any>>(
           .catch((error) => {
             retryCount += 1;
 
-            // If the circuit breaker triggers, stop further retries
-            if (handleFailureWithCircuitBreaker(retryCount, config)) {
+            if (circuitBreaker.handleFailure()) {
               reject(error);
               return;
             }
 
-            // Retry if we haven't hit the max retry count
-            if (retryCount <= maxRetryCount) {
-              setTimeout(tryLoadComponent, retryCount * config.initialRetryDelayMs);
+            if (retryCount <= adjustedRetryCount) {
+              setTimeout(tryLoadComponent, retryCount * adjustedDelay);
             } else {
               clearTimeout(timeoutId);
               reject(error);

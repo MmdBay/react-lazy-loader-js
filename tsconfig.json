@@ -3,6 +3,7 @@
       "target": "es6",
       "module": "es2020",
       "lib": ["es2020", "dom"],
+      "types": ["jest"],
       "jsx": "react",
       "moduleResolution": "node",
       "esModuleInterop": true,
