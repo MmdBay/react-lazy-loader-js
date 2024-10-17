@@ -11,7 +11,7 @@ export class CircuitBreaker {
   constructor(config: RetryConfig) {
     this.failureThreshold = config.circuitBreakerThreshold;
     this.resetTimeout = config.resetTimeMs;
-    this.successThreshold = 2;  // تعداد تلاش‌های موفق مورد نیاز برای بازگشت به حالت عادی
+    this.successThreshold = 2;  // The number of successful attempts required to return to normal
   }
 
   /**
