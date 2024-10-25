@@ -5,13 +5,14 @@
 
 `react-lazy-loader-js` is a smart loader for dynamically imported React components with retry, caching, and priority loading mechanisms. It provides features like dynamic retries, caching of loaded components, circuit breaker logic, prefetching, and priority loading to optimize the loading of React components in your app. You can also adjust the retry logic based on the user's internet speed and connection type.
 
-## Features
+## 🔥 Features
 
 - **Dynamic Retry Logic**: Automatically retries loading React components if the import fails due to network issues or other errors. Adjust the retry count and delay based on the user's network quality.
 - **Caching**: Caches successfully loaded components to speed up future loads using an LFU (Least Frequently Used) caching mechanism.
 - **Circuit Breaker**: Prevents excessive retries by implementing a circuit breaker pattern, stopping retries after a configurable threshold and resetting after a set time.
 - **Prefetching**: Prefetch components before they are needed to improve the user experience.
 - **Priority Loading**: Load less important components with a delay while prioritizing critical components.
+- **Customizable Loader**: Display retries, show network info, and style the loader however you want.
 
 ## Installation
 
@@ -22,6 +23,48 @@ npm install react-lazy-loader-js
 ```
 
 # Usage
+
+## 🆕 New in Version 1.1.0: Customizable Loader
+#### You asked for it, and here it is—a fully customizable loader that shows retry counts, network speed, and lets you style it your way.
+
+### 🚀 How to Use the Custom Loader:
+Example with Custom Loader Configuration:
+
+```typescript
+import { retryDynamicImport, LazyLoader } from 'react-lazy-loader-js';
+
+const LazyComponent = retryDynamicImport(() => import('./MyComponent'));
+
+function App() {
+  const configLoader = {
+    size: 60, // Size of the spinner in pixels
+    borderSize: 5, // Border thickness of the loader
+    color: 'blue', // Loader color
+    speed: 2, // Speed of the spinner in seconds
+    showRetries: true, // Show retry count below the loader
+    showNetworkInfo: true, // Show network speed info inside the loader
+    customStyle: { backgroundColor: 'rgba(255, 255, 255, 0.8)' } // Custom background styling
+  };
+  
+  return (
+    <div>
+      <LazyLoader LazyComponent={LazyComponent} loaderConfig={configLoader} retryCount={0} />
+    </div>
+  );
+}
+
+export default App;
+```
+Loader Configuration Options:
+
+- size: The size of the loader spinner (in pixels).
+- borderSize: Thickness of the loader’s border.
+- color: Color of the loader’s border.
+- speed: Speed of rotation (in seconds).
+- showRetries: Boolean that enables/disables showing retry attempts below the loader.
+- showNetworkInfo: Boolean to show/hide network speed and connection type inside the loader.
+- customStyle: Add your own custom styles to the loader container (e.g., background color).
+
 
 The package provides three main utilities: `retryDynamicImport`, `prefetchDynamicImport`, and `priorityLoadComponent`.
 
