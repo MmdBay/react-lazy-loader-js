@@ -10,6 +10,146 @@ declare const defaultConfig: {
 };
 type RetryConfig = typeof defaultConfig;
 
+/**
+ * This is the `LFUCache` class. It’s basically a "Least Frequently Used" cache,
+ * so if something hasn’t been used in a while, we’re gonna kick it out first.
+ * Oh, and we also keep track of how long stuff is good for with TTL (Time To Live).
+ */
+declare class LFUCache<K, V> {
+    private capacity;
+    private cache;
+    private ttl;
+    private heap;
+    constructor(capacity: number, ttl: number);
+    /**
+     * `get` is how we grab an item from the cache. If it's still valid (not expired),
+     * we return it and increase its frequency because, well, we just used it.
+     */
+    get(key: K): V | undefined;
+    /**
+     * `set` adds a new item to the cache. If we’re at full capacity, we gotta kick out
+     * the least-used item to make space. If the item already exists, we just update it.
+     */
+    set(key: K, value: V): void;
+    /**
+     * `evictLeastFrequentlyUsed` kicks out the item that’s been used the least.
+     * We call this when the cache is full and we need space for new stuff.
+     */
+    private evictLeastFrequentlyUsed;
+}
+
+type RetryStrategy = 'exponential' | 'linear' | ((retry: number, error: any) => number);
+type CacheBustingStrategy = 'query' | 'hash';
+type PrefetchStrategy = 'eager' | 'idle' | 'on-hover' | 'on-visible';
+/**
+ * Advanced retry configuration for dynamic imports.
+ */
+interface AdvancedRetryConfig extends Partial<RetryConfig> {
+    strategy?: RetryStrategy;
+    customDelayFn?: (retry: number, error: any) => number;
+    onRetry?: (retry: number, error: any) => void;
+    onSuccess?: (module: any) => void;
+    onError?: (error: any) => void;
+    retryCondition?: (error: any) => boolean;
+}
+type CacheType = 'lfu' | 'lru' | 'memory' | 'localStorage' | 'indexeddb' | 'custom';
+interface AdvancedCacheConfig {
+    enabled?: boolean;
+    customCache?: LFUCache<string, any> | any;
+    key?: (importFn: () => Promise<any>) => string;
+    maxAge?: number;
+    type?: CacheType;
+}
+/**
+ * Advanced circuit breaker configuration for dynamic imports.
+ */
+interface AdvancedCircuitBreakerConfig {
+    enabled?: boolean;
+    threshold?: number;
+    resetTime?: number;
+    customStrategy?: (failures: number, lastError: any) => boolean;
+}
+interface TelemetryEvent {
+    type: string;
+    data?: any;
+    timestamp: number;
+}
+type TelemetryHook = (event: TelemetryEvent) => void;
+/**
+ * Advanced logging configuration for dynamic imports.
+ */
+interface AdvancedLogConfig {
+    enabled?: boolean;
+    logger?: (event: string, data: any) => void;
+    telemetryHook?: TelemetryHook;
+}
+interface MultiStageLoadingConfig {
+    skeleton?: React.ReactNode;
+    spinner?: React.ReactNode;
+    delay?: number;
+}
+/**
+ * Advanced loader configuration for LazyLoader.
+ */
+interface AdvancedLoaderConfig extends Omit<LoaderConfig, 'errorFallback'> {
+    component?: React.ReactNode;
+    fallback?: React.ReactNode;
+    errorFallback?: (error: any, retry: () => void) => React.ReactNode;
+    loadingMessage?: string;
+    animation?: string;
+    animationKey?: LoaderAnimationKey;
+    customAnimation?: LoaderAnimationComponent;
+    theme?: string;
+    customLoader?: React.ReactNode;
+    errorMessage?: string | ((error: any) => React.ReactNode);
+    retryButtonText?: string;
+    errorColor?: string;
+    retryButtonStyle?: React.CSSProperties;
+    a11yLabel?: string;
+    a11yRole?: string;
+    multiStage?: MultiStageLoadingConfig;
+    progressiveFallback?: React.ReactNode;
+    fallbackStrategy?: 'static' | 'simple' | 'none' | ((error: any) => React.ReactNode);
+}
+/**
+ * Advanced network configuration for dynamic imports.
+ */
+interface AdvancedNetworkConfig {
+    adjustRetry?: boolean;
+    customNetworkInfo?: any;
+}
+/**
+ * Advanced SSR configuration for dynamic imports.
+ */
+interface AdvancedSSRConfig {
+    enabled?: boolean;
+    fallback?: React.ReactNode;
+}
+type ImportFrom = 'local' | 'cdn' | 'remote' | string;
+interface MockImportConfig {
+    enabled?: boolean;
+    mockImport?: () => Promise<any>;
+}
+/**
+ * Main options object for retryDynamicImport and LazyLoader.
+ */
+interface RetryDynamicImportOptions {
+    retry?: AdvancedRetryConfig;
+    cache?: AdvancedCacheConfig;
+    circuitBreaker?: AdvancedCircuitBreakerConfig;
+    loader?: AdvancedLoaderConfig;
+    ssr?: AdvancedSSRConfig;
+    log?: AdvancedLogConfig;
+    network?: AdvancedNetworkConfig;
+    priority?: number;
+    prefetch?: boolean;
+    preload?: boolean;
+    maxConcurrentLoads?: number;
+    cacheBustingStrategy?: CacheBustingStrategy;
+    suspense?: boolean;
+    importFrom?: ImportFrom;
+    mock?: MockImportConfig;
+}
 interface LoaderConfig {
     size?: number;
     borderSize?: number;
@@ -18,51 +158,54 @@ interface LoaderConfig {
     showRetries?: boolean;
     showNetworkInfo?: boolean;
     customStyle?: React.CSSProperties;
+    errorFallback?: React.ReactNode;
 }
+type LoaderAnimationKey = string;
+type LoaderAnimationComponent = React.FC<any>;
 /**
- * Alright, so this `retryDynamicImport` function is how we load React components dynamically,
- * but with some extra retry logic in case things fail. We use a circuit breaker and cache
- * to make sure we don't keep retrying endlessly.
- *
- * @template T - The component type.
- * @param {() => Promise<{ default: T }>} importFunction - This is the function that imports the component.
- * @param {Partial<RetryConfig>} [customConfig] - Optional retry and circuit breaker settings.
- * @param {Partial<LoaderConfig>} [loaderConfig] - Optional settings for the loading spinner.
- * @returns {React.LazyExoticComponent<T>} - This returns a lazy-loaded React component.
+ * LazyLoader: Advanced lazy loader with error handling, retry, and full customization.
  */
-declare function retryDynamicImport<T extends ComponentType<any>>(importFunction: () => Promise<{
-    default: T;
-}>, customConfig?: Partial<RetryConfig>, loaderConfig?: Partial<LoaderConfig>): React.LazyExoticComponent<T>;
+declare const LazyLoader: ({ importFunction, options, fallback, ...rest }: {
+    [key: string]: any;
+    importFunction: () => Promise<{
+        default: ComponentType<any>;
+    }>;
+    options?: RetryDynamicImportOptions | undefined;
+    fallback?: React.ReactNode;
+}) => React.JSX.Element | null;
 /**
- * This is the `LazyLoader` component, which wraps our lazy-loaded component and
- * shows a loading spinner while it's doing its thing. The spinner is customizable
- * with stuff like size, color, speed, etc.
- *
- * @param {Object} props - Props for LazyLoader.
- * @param {React.LazyExoticComponent<any>} props.LazyComponent - The component we’re lazy-loading.
- * @param {number} props.retryCount - Number of retry attempts.
- * @param {LoaderConfig} props.loaderConfig - Custom config for the loader (spinner).
- * @returns {JSX.Element} - Returns the component wrapped with a loader.
+ * retryDynamicImport: Advanced HOC for dynamic import with full configuration.
+ * @param importFunction - The dynamic import function
+ * @param options - Advanced options for retry, cache, loader, etc.
+ * @returns React.FC<any>
  */
-declare const LazyLoader: ({ LazyComponent, retryCount, loaderConfig }: {
-    LazyComponent: React.LazyExoticComponent<any>;
-    retryCount: number;
-    loaderConfig: LoaderConfig;
-}) => React.JSX.Element;
+declare function retryDynamicImport(importFunction: () => Promise<{
+    default: ComponentType<any>;
+}>, options?: RetryDynamicImportOptions): React.FC<any>;
 /**
- * prefetchDynamicImport: Pre-loads a dynamic component and caches it so that when the user
- * actually needs it, it loads instantly.
- *
- * @param {() => Promise<any>} importFunction - The function to dynamically import the component.
+ * prefetchDynamicImport: Advanced prefetch for dynamic import with options and strategies.
+ * Supports: eager, idle, on-hover, on-visible
  */
-declare const prefetchDynamicImport: (importFunction: () => Promise<any>) => void;
+declare const prefetchDynamicImport: (importFunction: () => Promise<any>, options?: {
+    priority?: number | undefined;
+    onSuccess?: (() => void) | undefined;
+    onError?: ((err: any) => void) | undefined;
+    cache?: {
+        enabled?: boolean | undefined;
+        key?: string | undefined;
+    } | undefined;
+    strategy?: PrefetchStrategy | undefined;
+    elementRef?: React.RefObject<HTMLElement> | undefined;
+} | undefined) => void;
 /**
- * priorityLoadComponent: This one’s for when you want to load a less important component after a delay.
- * The higher the priority value, the longer we wait before loading.
- *
- * @param {() => Promise<any>} importFunction - The function to dynamically import the component.
- * @param {number} priority - Delay in seconds before loading the component.
+ * priorityLoadComponent: Advanced priority/delayed loader for dynamic import.
  */
-declare const priorityLoadComponent: (importFunction: () => Promise<any>, priority: number) => void;
+declare const priorityLoadComponent: (importFunction: () => Promise<any>, options?: {
+    priority?: number;
+    delay?: number;
+    queue?: boolean;
+    maxConcurrent?: number;
+    onLoad?: () => void;
+}) => void;
 
 export { LazyLoader, prefetchDynamicImport, priorityLoadComponent, retryDynamicImport };

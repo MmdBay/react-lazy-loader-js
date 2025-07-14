@@ -73,18 +73,25 @@ function App() {
       importFunction={() => import('./MyComponent')}
       options={{
         retry: {
-          maxCount: 3,
-          strategy: 'exponential',
-          baseDelay: 1000,
+          maxRetryCount: 3,
+          strategy: 'linear',
+          initialRetryDelayMs: 500,
         },
         loader: {
           theme: 'dark',
-          animation: 'pulse',
-          size: 'medium',
+          animation: 'spin',
+          size: 48, // pixels
+          loadingMessage: 'Loading user profile...',
+          errorFallback: (error, retry) => (
+            <div>
+              <p>Failed to load: {error.message}</p>
+              <button onClick={retry}>Retry</button>
+            </div>
+          ),
         },
         cache: {
-          type: 'lfu',
-          maxAge: 3600000, // 1 hour
+          type: 'memory',
+          maxSize: 50,
         },
       }}
     />
@@ -116,10 +123,10 @@ const LazyComponent = retryDynamicImport(
   () => import('./MyComponent'),
   {
     retry: {
-      maxCount: 5,
+      maxRetryCount: 5,
       strategy: 'exponential',
-      baseDelay: 1000,
-      maxDelay: 10000,
+      initialRetryDelayMs: 1000,
+      maxRetryDelayMs: 10000,
     },
     cache: {
       type: 'lfu',
@@ -129,8 +136,8 @@ const LazyComponent = retryDynamicImport(
     loader: {
       theme: 'light',
       animation: 'wave',
-      size: 'large',
-      text: 'Loading component...',
+      size: 64,
+      loadingMessage: 'Loading component...',
     },
   }
 );
@@ -156,26 +163,26 @@ function App() {
       importFunction={() => import('./MyComponent')}
       options={{
         retry: {
-          maxCount: 3,
+          maxRetryCount: 3,
           strategy: 'linear',
-          baseDelay: 500,
+          initialRetryDelayMs: 500,
         },
         loader: {
           theme: 'dark',
           animation: 'spin',
-          size: 'medium',
-          text: 'Loading user profile...',
+          size: 48,
+          loadingMessage: 'Loading user profile...',
+          errorFallback: (error, retry) => (
+            <div>
+              <p>Failed to load: {error.message}</p>
+              <button onClick={retry}>Retry</button>
+            </div>
+          ),
         },
         cache: {
           type: 'memory',
           maxSize: 50,
         },
-        errorFallback: (error, retry) => (
-          <div>
-            <p>Failed to load: {error.message}</p>
-            <button onClick={retry}>Retry</button>
-          </div>
-        ),
       }}
     />
   );
@@ -188,10 +195,10 @@ function App() {
 
 ```tsx
 retry: {
-  maxCount: 3,                    // Maximum number of retry attempts
+  maxRetryCount: 3,               // Maximum number of retry attempts
   strategy: 'exponential',        // 'exponential', 'linear', 'custom'
-  baseDelay: 1000,               // Base delay in milliseconds
-  maxDelay: 10000,               // Maximum delay in milliseconds
+  initialRetryDelayMs: 1000,      // Base delay in milliseconds
+  maxRetryDelayMs: 10000,         // Maximum delay in milliseconds
   backoffMultiplier: 2,          // Multiplier for exponential backoff
   jitter: true,                  // Add random jitter to delays
   onRetry: (attempt, error) => {}, // Callback on each retry
@@ -205,9 +212,8 @@ retry: {
 loader: {
   theme: 'light',                // 'light', 'dark', 'custom'
   animation: 'spin',             // 'spin', 'pulse', 'wave', 'bounce', 'custom'
-  size: 'medium',                // 'small', 'medium', 'large', 'custom'
-  text: 'Loading...',            // Loading text
-  showText: true,                // Whether to show loading text
+  size: 48,                      // Loader diameter in px
+  loadingMessage: 'Loading...',
   className: 'custom-loader',    // Custom CSS class
   style: { color: 'blue' },      // Custom inline styles
   glow: true,                    // Enable glow effect
@@ -292,14 +298,14 @@ import { LazyLoaderProvider } from 'react-lazy-loader-js';
 
 const globalConfig = {
   retry: {
-    maxCount: 3,
+    maxRetryCount: 3,
     strategy: 'exponential',
-    baseDelay: 1000,
+    initialRetryDelayMs: 1000,
   },
   loader: {
     theme: 'dark',
     animation: 'wave',
-    size: 'medium',
+    size: 48,
   },
   cache: {
     type: 'lfu',
@@ -518,7 +524,7 @@ function MyComponent() {
   const { load, loading, error, retry, abort } = useRetryDynamicImport(
     () => import('./MyComponent'),
     {
-      maxCount: 3,
+      maxRetryCount: 3,
       strategy: 'exponential',
     }
   );
@@ -645,7 +651,7 @@ const customTheme = {
   styles: {
     container: 'custom-loader-container',
     spinner: 'custom-loader-spinner',
-    text: 'custom-loader-text',
+    loadingMessage: 'custom-loader-text',
   },
 };
 
@@ -698,10 +704,10 @@ const customCache = createCustomCache({
 const completeOptions = {
   // Retry configuration
   retry: {
-    maxCount: 3,
+    maxRetryCount: 3,
     strategy: 'exponential',
-    baseDelay: 1000,
-    maxDelay: 10000,
+    initialRetryDelayMs: 1000,
+    maxRetryDelayMs: 10000,
     backoffMultiplier: 2,
     jitter: true,
     onRetry: (attempt, error) => {},
@@ -712,9 +718,8 @@ const completeOptions = {
   loader: {
     theme: 'light',
     animation: 'spin',
-    size: 'medium',
-    text: 'Loading...',
-    showText: true,
+    size: 48,
+    loadingMessage: 'Loading...',
     className: '',
     style: {},
     glow: true,
@@ -869,10 +874,12 @@ test('handles retry on error', async () => {
     <LazyLoader
       importFunction={mockImport}
       options={{
-        retry: { maxCount: 2 },
-        errorFallback: (error, retry) => (
-          <button onClick={retry}>Retry</button>
-        ),
+        retry: { maxRetryCount: 2 },
+        loader: {
+          errorFallback: (error, retry) => (
+            <button onClick={retry}>Retry</button>
+          ),
+        },
       }}
     />
   );
@@ -965,7 +972,7 @@ const LazyComponent = retryDynamicImport(() => import('./MyComponent'), {
 ```tsx
 // Ensure retry configuration is correct
 retry: {
-  maxCount: 3,
+  maxRetryCount: 3,
   strategy: 'exponential',
   shouldRetry: (error) => {
     // Only retry network errors
@@ -1071,3 +1078,39 @@ If you need help or have questions:
 ## ⭐ Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=mmdbay/react-lazy-loader-js&type=Date)](https://star-history.com/#mmdbay/react-lazy-loader-js&Date)
+
+### Using with Next.js (App Router)
+
+```tsx
+"use client";
+import { LazyLoader } from "react-lazy-loader-js";
+
+export default function Page() {
+  return (
+    <div>
+      <LazyLoader
+        importFunction={() => import("../components/pages/auth/login/index")}
+        options={{
+          suspense: false,               // Disable Suspense to avoid streaming issues
+          retry: {
+            maxRetryCount: 3,
+            strategy: "exponential",
+            initialRetryDelayMs: 800,
+          },
+          loader: {
+            theme: "dark",
+            animation: "pulse",
+            loadingMessage: "در حال بارگذاری...", // Farsi message example
+            size: 48,
+          },
+          cache: {
+            enabled: true,
+            type: "lfu",
+            maxAge: 60 * 60 * 1000, // 1 hour
+          },
+        }}
+      />
+    </div>
+  );
+}
+```

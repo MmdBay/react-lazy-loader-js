@@ -61,9 +61,11 @@ export const getRetryImportFunction = (
 
   // Check if we're in a server-side environment (SSR/SSG) where dynamic URL imports won't work
   const isServerSide = typeof window === 'undefined';
+  // Detect Next.js client-side runtime environment (window.__NEXT_DATA__ exists)
+  const isNextJs = !isServerSide && typeof (window as any)?.__NEXT_DATA__ !== 'undefined';
 
   // If we're in server-side environment, don't use dynamic URL imports as they can't be resolved at build time
-  if (isServerSide) {
+  if (isServerSide || isNextJs) {
     // For server-side rendering, we'll use a different approach: wrap the original import with a retry mechanism
     // that doesn't rely on URL manipulation
     return () => {
@@ -87,7 +89,8 @@ export const getRetryImportFunction = (
 
     // We return a new import function that uses this modified URL with our custom query parameter.
     // Note: This approach works in regular React apps but not in Next.js SSR
-    return () => import(/* @vite-ignore */ url.toString()); // The @vite-ignore comment is to avoid issues with Vite.
+    // Include both Vite and Webpack ignore hints so various bundlers skip static analysis on the variable URL.
+    return () => import(/* @vite-ignore */ /* webpackIgnore: true */ url.toString());
   } catch (error) {
     // If something goes wrong (like if we can't build the URL), we log the error and just return the original import.
     console.error('Error in getRetryImportFunction:', error);

@@ -437,20 +437,24 @@ export const LazyLoader = ({
   // SSR/SSG support: If window is undefined, render SSR fallback or progressive fallback
   if (typeof window === 'undefined') {
     if (loaderConfig.fallbackStrategy === 'static' && loaderConfig.progressiveFallback) {
-      return loaderConfig.progressiveFallback;
+      return <>{loaderConfig.progressiveFallback}</>;
     }
-    return mergedOptions.ssr?.fallback || null;
+    const ssrFallback = mergedOptions.ssr?.fallback;
+    if (ssrFallback !== undefined && ssrFallback !== null) {
+      return <>{ssrFallback}</>;
+    }
+    return null;
   }
 
   if (error) {
     if (typeof loaderConfig.errorFallback === 'function') {
-      return loaderConfig.errorFallback(error, reset);
+      return <>{loaderConfig.errorFallback(error, reset)}</>;
     }
     if (typeof loaderConfig.fallbackStrategy === 'function') {
-      return loaderConfig.fallbackStrategy(error);
+      return <>{loaderConfig.fallbackStrategy(error)}</>;
     }
     if (loaderConfig.fallbackStrategy === 'static' && loaderConfig.progressiveFallback) {
-      return loaderConfig.progressiveFallback;
+      return <>{loaderConfig.progressiveFallback}</>;
     }
     if (loaderConfig.fallbackStrategy === 'simple') {
       let msg: React.ReactNode = 'Failed to load.';
@@ -489,10 +493,10 @@ export const LazyLoader = ({
   // Suspense-less loading support
   if (mergedOptions.suspense === false) {
     if (loaderConfig.multiStage?.skeleton && !showSpinner) {
-      return loaderConfig.multiStage.skeleton;
+      return <>{loaderConfig.multiStage.skeleton}</>;
     }
     if (AnimationComponent) return <AnimationComponent {...loaderProps} />;
-    return loaderConfig.customLoader || fallback || <Loader {...loaderProps} />;
+    return <>{loaderConfig.customLoader ?? fallback ?? <Loader {...loaderProps} />}</>;
   }
 
   // Telemetry/logging example (can be expanded)

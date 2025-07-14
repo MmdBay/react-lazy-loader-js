@@ -17,19 +17,114 @@ var __spreadValues = (a, b) => {
   return a;
 };
 var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
+var __objRest = (source, exclude) => {
+  var target = {};
+  for (var prop in source)
+    if (__hasOwnProp.call(source, prop) && exclude.indexOf(prop) < 0)
+      target[prop] = source[prop];
+  if (source != null && __getOwnPropSymbols)
+    for (var prop of __getOwnPropSymbols(source)) {
+      if (exclude.indexOf(prop) < 0 && __propIsEnum.call(source, prop))
+        target[prop] = source[prop];
+    }
+  return target;
+};
+var __async = (__this, __arguments, generator) => {
+  return new Promise((resolve, reject) => {
+    var fulfilled = (value) => {
+      try {
+        step(generator.next(value));
+      } catch (e) {
+        reject(e);
+      }
+    };
+    var rejected = (value) => {
+      try {
+        step(generator.throw(value));
+      } catch (e) {
+        reject(e);
+      }
+    };
+    var step = (x) => x.done ? resolve(x.value) : Promise.resolve(x.value).then(fulfilled, rejected);
+    step((generator = generator.apply(__this, __arguments)).next());
+  });
+};
 
 // src/networkSpeed.ts
-function getNetworkInfo() {
-  const connection = navigator.connection;
-  if (connection) {
-    const { effectiveType, downlink, saveData } = connection;
-    return { effectiveType, downlink, saveData };
+var cachedInfo = null;
+var cacheTime = 0;
+var CACHE_TTL = 3e4;
+function getNavigatorConnection() {
+  if (typeof navigator !== "undefined" && navigator.connection) {
+    return navigator.connection;
   }
-  return { effectiveType: "unknown", downlink: 0, saveData: false };
+  return null;
+}
+function buildInfoFromAPI(conn) {
+  var _a;
+  return {
+    effectiveType: conn.effectiveType || "unknown",
+    type: conn.type,
+    downlink: (_a = conn.downlink) != null ? _a : 0,
+    downlinkMax: conn.downlinkMax,
+    rtt: conn.rtt,
+    saveData: !!conn.saveData,
+    latency: conn.rtt,
+    lastTested: Date.now(),
+    isEstimate: false
+  };
+}
+function estimateSpeedByImage() {
+  return __async(this, null, function* () {
+    const imageUrl = "https://www.google.com/images/phd/px.gif";
+    const start = Date.now();
+    let downlink = 0;
+    let latency = 0;
+    try {
+      const before = Date.now();
+      yield fetch(imageUrl, { cache: "no-store" });
+      const after = Date.now();
+      latency = after - before;
+      downlink = Math.max(0.01, 43 * 8 / (latency / 1e3) / 1e6);
+    } catch (e) {
+    }
+    return {
+      effectiveType: "unknown",
+      downlink,
+      saveData: false,
+      latency,
+      lastTested: Date.now(),
+      isEstimate: true,
+      error: downlink === 0 ? "Could not estimate speed" : void 0
+    };
+  });
+}
+function getNetworkInfo(forceRefresh = false) {
+  return __async(this, null, function* () {
+    if (!forceRefresh && cachedInfo && Date.now() - cacheTime < CACHE_TTL) return cachedInfo;
+    const conn = getNavigatorConnection();
+    if (conn) {
+      cachedInfo = buildInfoFromAPI(conn);
+      cacheTime = Date.now();
+      return cachedInfo;
+    }
+    cachedInfo = yield estimateSpeedByImage();
+    cacheTime = Date.now();
+    return cachedInfo;
+  });
 }
 
 // src/retry.tsx
-import React2, { lazy } from "react";
+import React2, {
+  lazy,
+  useState as useState2,
+  useCallback as useCallback2,
+  useRef,
+  useEffect as useEffect2,
+  Suspense,
+  createContext,
+  useContext
+} from "react";
 
 // src/config.ts
 var defaultConfig = {
@@ -278,11 +373,23 @@ var getRetryImportFunction = (originalImport, retryCount) => {
   if (!importUrl || retryCount === 0) {
     return originalImport;
   }
+  const isServerSide = typeof window === "undefined";
+  const isNextJs = !isServerSide && typeof (window == null ? void 0 : window.__NEXT_DATA__) !== "undefined";
+  if (isServerSide || isNextJs) {
+    return () => {
+      return new Promise((resolve, reject) => {
+        setTimeout(() => {
+          originalImport().then(resolve).catch(reject);
+        }, retryCount * 10);
+      });
+    };
+  }
   try {
     const url = new URL(importUrl, window.location.href);
     url.searchParams.append("v", `${retryCount}-${Math.random().toString(36).substring(2)}`);
     return () => import(
       /* @vite-ignore */
+      /* webpackIgnore: true */
       url.toString()
     );
   } catch (error) {
@@ -371,39 +478,51 @@ var CircuitBreaker = class {
 
 // src/LoadingSpinner.tsx
 import React, { useState, useEffect, useCallback } from "react";
+var defaultLabels = {
+  retryLabel: "\u062A\u0644\u0627\u0634 \u0645\u062C\u062F\u062F",
+  speedLabel: "\u0633\u0631\u0639\u062A",
+  typeLabel: "\u0646\u0648\u0639 \u0627\u062A\u0635\u0627\u0644",
+  saveDataLabel: "\u0635\u0631\u0641\u0647\u200C\u062C\u0648\u06CC\u06CC \u062F\u06CC\u062A\u0627",
+  saveDataOn: "\u0641\u0639\u0627\u0644",
+  saveDataOff: "\u063A\u06CC\u0631\u0641\u0639\u0627\u0644",
+  gettingLabel: "\u062F\u0631 \u062D\u0627\u0644 \u062F\u0631\u06CC\u0627\u0641\u062A...",
+  percentLabel: (progress) => `${progress}%`,
+  messageLabel: ""
+};
 var Loader = ({
-  size = 50,
-  // If no size is provided, we default to 50px
-  borderSize = 4,
-  // Border thickness defaults to 4px
-  color = "#000",
-  // Default color is black
-  speed = 1,
-  // It rotates once every 1 second by default
+  size = 60,
+  borderSize = 6,
+  color = "#4f8cff",
+  gradient,
+  speed = 1.2,
   retries = 0,
-  // Starts with 0 retries
   showRetries = true,
-  // We show retries by default
   showNetworkInfo = true,
-  // We also show network info by default
-  customStyle = {}
-  // No custom styles by default
+  customStyle = {},
+  shadow = "0 0 24px 0 #4f8cff55",
+  glow = true,
+  animationType = "spinner",
+  icon,
+  progress,
+  message,
+  darkMode = false,
+  children,
+  labels = {}
 }) => {
+  const mergedLabels = __spreadValues(__spreadValues({}, defaultLabels), labels);
   const [networkInfo, setNetworkInfo] = useState({
     downlink: null,
-    // Start with no info on download speed
     effectiveType: "unknown",
-    // Start with an unknown connection type
     saveData: false
-    // Assume data saver is off to start
   });
   const updateNetworkInfo = useCallback(() => {
-    const info = getNetworkInfo();
-    setNetworkInfo((prevInfo) => {
-      if (info.downlink !== prevInfo.downlink || info.effectiveType !== prevInfo.effectiveType || info.saveData !== prevInfo.saveData) {
-        return info;
-      }
-      return prevInfo;
+    getNetworkInfo().then((info) => {
+      setNetworkInfo((prevInfo) => {
+        if (info.downlink !== prevInfo.downlink || info.effectiveType !== prevInfo.effectiveType || info.saveData !== prevInfo.saveData) {
+          return info;
+        }
+        return prevInfo;
+      });
     });
   }, []);
   useEffect(() => {
@@ -418,22 +537,143 @@ var Loader = ({
       }
     };
   }, [updateNetworkInfo]);
-  return /* @__PURE__ */ React.createElement("div", { style: __spreadValues(__spreadValues({}, styles.loaderContainer), customStyle) }, " ", /* @__PURE__ */ React.createElement(
+  useEffect(() => {
+    if (typeof window !== "undefined" && !document.getElementById("loader-keyframes")) {
+      const style = document.createElement("style");
+      style.id = "loader-keyframes";
+      style.innerHTML = `
+        @keyframes spin { 0% { transform: rotate(0deg);} 100% { transform: rotate(360deg);} }
+        @keyframes pulse { 0% { opacity: 0.7; transform: scale(1);} 50% { opacity: 0.2; transform: scale(1.15);} 100% { opacity: 0.7; transform: scale(1);} }
+        @keyframes dot-bounce { 0%, 80%, 100% { transform: scale(0);} 40% { transform: scale(1);} }
+        @keyframes wave { 0%, 40%, 100% { transform: scaleY(0.4);} 20% { transform: scaleY(1.0);} }
+        @keyframes bar { 0% { left: -40%; } 100% { left: 100%; } }
+      `;
+      document.head.appendChild(style);
+    }
+  }, []);
+  const spinnerBorder = gradient ? `conic-gradient(${gradient.join(", ")})` : void 0;
+  const renderSpinner = () => /* @__PURE__ */ React.createElement(
     "div",
     {
-      style: __spreadProps(__spreadValues({}, styles.loader), {
-        borderWidth: borderSize,
-        // Spinner border thickness
-        borderColor: `${color} transparent transparent transparent`,
-        // Spinner color
+      style: __spreadValues({
         width: size,
-        // Set the size of the spinner (width and height)
         height: size,
-        animation: `spin ${speed}s linear infinite`
-        // How fast it spins (based on `speed` prop)
-      })
+        border: `${borderSize}px solid #e0e7ff`,
+        borderTop: `${borderSize}px solid ${color}`,
+        borderRadius: "50%",
+        boxShadow: shadow,
+        animation: `spin ${speed}s cubic-bezier(.68,-0.55,.27,1.55) infinite`,
+        position: "relative",
+        background: spinnerBorder
+      }, glow ? { filter: `drop-shadow(0 0 12px ${color}99)` } : {})
+    },
+    typeof progress === "number" && /* @__PURE__ */ React.createElement(
+      "svg",
+      {
+        width: size,
+        height: size,
+        style: {
+          position: "absolute",
+          top: 0,
+          left: 0,
+          transform: "rotate(-90deg)",
+          pointerEvents: "none"
+        }
+      },
+      /* @__PURE__ */ React.createElement(
+        "circle",
+        {
+          cx: size / 2,
+          cy: size / 2,
+          r: (size - borderSize) / 2.2,
+          fill: "none",
+          stroke: color,
+          strokeWidth: borderSize,
+          strokeDasharray: 2 * Math.PI * ((size - borderSize) / 2.2),
+          strokeDashoffset: 2 * Math.PI * ((size - borderSize) / 2.2) * (1 - progress / 100),
+          style: { transition: "stroke-dashoffset 0.4s" }
+        }
+      )
+    )
+  );
+  const renderDots = () => /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: size * 0.12 } }, [0, 1, 2].map((i) => /* @__PURE__ */ React.createElement(
+    "div",
+    {
+      key: i,
+      style: {
+        width: size * 0.22,
+        height: size * 0.22,
+        borderRadius: "50%",
+        background: gradient ? `linear-gradient(135deg, ${gradient.join(", ")})` : color,
+        animation: `dot-bounce 1.4s infinite both`,
+        animationDelay: `${i * 0.16}s`,
+        boxShadow: glow ? `0 0 8px ${color}99` : void 0
+      }
     }
-  ), showRetries && /* @__PURE__ */ React.createElement("div", { style: styles.retryText }, "Retries: ", retries), showNetworkInfo && /* @__PURE__ */ React.createElement("div", { style: styles.networkInfo }, /* @__PURE__ */ React.createElement("div", null, "Speed: ", networkInfo.downlink !== null ? `${networkInfo.downlink} Mbps` : "Loading..."), /* @__PURE__ */ React.createElement("div", null, "Connection Type: ", networkInfo.effectiveType), /* @__PURE__ */ React.createElement("div", null, "Data Saver: ", networkInfo.saveData ? "Enabled" : "Disabled")));
+  )));
+  const renderWave = () => /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "end", gap: size * 0.08, height: size * 0.5 } }, [0, 1, 2, 3, 4].map((i) => /* @__PURE__ */ React.createElement(
+    "div",
+    {
+      key: i,
+      style: {
+        width: size * 0.12,
+        height: size * 0.5,
+        background: gradient ? `linear-gradient(135deg, ${gradient.join(", ")})` : color,
+        borderRadius: 6,
+        animation: `wave 1.2s infinite ease-in-out`,
+        animationDelay: `${i * 0.1}s`,
+        boxShadow: glow ? `0 0 8px ${color}99` : void 0
+      }
+    }
+  )));
+  const renderBar = () => /* @__PURE__ */ React.createElement(
+    "div",
+    {
+      style: {
+        width: size * 1.2,
+        height: borderSize * 2.2,
+        background: "#e0e7ff",
+        borderRadius: borderSize,
+        overflow: "hidden",
+        position: "relative"
+      }
+    },
+    /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        style: {
+          position: "absolute",
+          height: "100%",
+          width: "40%",
+          background: gradient ? `linear-gradient(90deg, ${gradient.join(", ")})` : color,
+          borderRadius: borderSize,
+          animation: "bar 1.2s infinite linear",
+          boxShadow: glow ? `0 0 8px ${color}99` : void 0
+        }
+      }
+    )
+  );
+  const renderIcon = () => icon && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12, fontSize: size * 0.7 } }, icon);
+  const themeStyles = darkMode ? {
+    background: "linear-gradient(135deg, #23272f 0%, #2d3748 100%)",
+    color: "#e0e7ff"
+  } : {};
+  return /* @__PURE__ */ React.createElement(
+    "div",
+    {
+      style: __spreadValues(__spreadValues(__spreadValues({}, styles.loaderContainer), themeStyles), customStyle)
+    },
+    renderIcon(),
+    animationType === "spinner" && renderSpinner(),
+    animationType === "dots" && renderDots(),
+    animationType === "wave" && renderWave(),
+    animationType === "bar" && renderBar(),
+    typeof progress === "number" && /* @__PURE__ */ React.createElement("div", { style: styles.progressText }, mergedLabels.percentLabel ? mergedLabels.percentLabel(progress) : `${progress}%`),
+    showRetries && /* @__PURE__ */ React.createElement("div", { style: styles.retryText }, mergedLabels.retryLabel, ": ", retries),
+    showNetworkInfo && /* @__PURE__ */ React.createElement("div", { style: styles.networkInfo }, /* @__PURE__ */ React.createElement("div", null, mergedLabels.speedLabel, ": ", " ", networkInfo.downlink !== null ? `${networkInfo.downlink} Mbps` : mergedLabels.gettingLabel), /* @__PURE__ */ React.createElement("div", null, mergedLabels.typeLabel, ": ", networkInfo.effectiveType), /* @__PURE__ */ React.createElement("div", null, mergedLabels.saveDataLabel, ": ", networkInfo.saveData ? mergedLabels.saveDataOn : mergedLabels.saveDataOff)),
+    message && /* @__PURE__ */ React.createElement("div", { style: styles.message }, message),
+    children
+  );
 };
 var styles = {
   loaderContainer: {
@@ -441,107 +681,383 @@ var styles = {
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    height: "100vh",
-    width: "100vw",
+    minHeight: "100vh",
+    minWidth: "100vw",
     position: "absolute",
     top: 0,
-    left: 0
-  },
-  loader: {
-    borderRadius: "50%",
-    borderStyle: "solid",
-    boxSizing: "border-box"
+    left: 0,
+    zIndex: 9999,
+    transition: "background 0.3s"
   },
   retryText: {
-    marginTop: 10,
-    fontSize: "16px",
-    color: "#000"
+    marginTop: 18,
+    fontSize: "18px",
+    color: "#4f8cff",
+    fontWeight: 600,
+    letterSpacing: 1,
+    textShadow: "0 1px 8px #b6ccff"
   },
   networkInfo: {
-    marginTop: 5,
-    fontSize: "14px",
+    marginTop: 8,
+    fontSize: "15px",
     color: "#555",
-    textAlign: "center"
+    textAlign: "center",
+    background: "#f3f6ffcc",
+    borderRadius: 8,
+    padding: "8px 16px",
+    boxShadow: "0 2px 8px #e0e7ff"
+  },
+  progressText: {
+    marginTop: 10,
+    fontSize: "16px",
+    color: "#4f8cff",
+    fontWeight: 700,
+    letterSpacing: 1
+  },
+  message: {
+    marginTop: 14,
+    fontSize: "16px",
+    color: "#333",
+    textAlign: "center",
+    fontWeight: 500
   }
 };
 var LoadingSpinner_default = Loader;
 
 // src/retry.tsx
-var lfuCache = new LFUCache(5, 36e5);
-function retryDynamicImport(importFunction, customConfig, loaderConfig) {
-  const config = getConfig(customConfig);
-  let retryCount = 0;
-  let hasTimedOut = false;
-  const { maxRetryCount, timeoutMs } = config;
-  const circuitBreaker = new CircuitBreaker(config);
-  const loadComponent = () => new Promise((resolve, reject) => {
-    const { effectiveType, downlink } = getNetworkInfo();
-    const adjustedRetryCount = downlink < 1 || effectiveType.includes("2g") ? maxRetryCount * 2 : maxRetryCount;
-    const adjustedDelay = downlink < 1 || effectiveType.includes("2g") ? config.initialRetryDelayMs * 2 : config.initialRetryDelayMs;
-    const importUrl = getRouteComponentUrl(importFunction);
-    const cachedComponent = importUrl ? lfuCache.get(importUrl) : null;
-    if (cachedComponent) {
-      resolve(cachedComponent);
-      return;
-    }
-    const timeoutId = setTimeout(() => {
-      hasTimedOut = true;
-      reject(new Error("Component load timed out."));
-    }, timeoutMs);
-    function tryLoadComponent() {
-      if (hasTimedOut) return;
-      const retryImport = getRetryImportFunction(importFunction, retryCount);
-      retryImport().then((module) => {
-        clearTimeout(timeoutId);
-        if (importUrl) {
-          lfuCache.set(importUrl, module);
-        }
-        resolve(module);
-      }).catch((error) => {
-        retryCount += 1;
-        if (circuitBreaker.handleFailure()) {
-          reject(error);
-          return;
-        }
-        if (retryCount <= adjustedRetryCount) {
-          setTimeout(tryLoadComponent, retryCount * adjustedDelay);
-        } else {
-          clearTimeout(timeoutId);
-          reject(error);
-        }
-      });
-    }
-    tryLoadComponent();
-  });
-  return lazy(() => loadComponent());
+var defaultLFUCache = new LFUCache(5, 36e5);
+var LazyLoaderContext = createContext({});
+function useMergedOptions(options) {
+  const contextOptions = useContext(LazyLoaderContext);
+  return __spreadValues(__spreadValues({}, contextOptions || {}), options || {});
 }
-var LazyLoader = ({ LazyComponent, retryCount, loaderConfig }) => /* @__PURE__ */ React2.createElement(
-  React2.Suspense,
-  {
-    fallback: /* @__PURE__ */ React2.createElement(
-      LoadingSpinner_default,
-      {
-        retries: retryCount,
-        size: loaderConfig.size,
-        borderSize: loaderConfig.borderSize,
-        color: loaderConfig.color,
-        speed: loaderConfig.speed,
-        showRetries: loaderConfig.showRetries,
-        showNetworkInfo: loaderConfig.showNetworkInfo,
-        customStyle: loaderConfig.customStyle
+function useRetryDynamicImport(importFunction, options = {}) {
+  var _a, _b;
+  const mergedOptions = useMergedOptions(options);
+  const retryConfig = getConfig(mergedOptions.retry);
+  const [retryCount, setRetryCount] = useState2(0);
+  const [error, setError] = useState2(null);
+  const abortRef = useRef(null);
+  const circuitBreaker = useRef(new CircuitBreaker(__spreadValues(__spreadValues({}, retryConfig), mergedOptions.circuitBreaker || {})));
+  const cache = ((_a = mergedOptions.cache) == null ? void 0 : _a.customCache) || defaultLFUCache;
+  const cacheKey = ((_b = mergedOptions.cache) == null ? void 0 : _b.key) ? mergedOptions.cache.key(importFunction) : getRouteComponentUrl(importFunction);
+  const loadComponent = useCallback2(() => __async(this, null, function* () {
+    var _a2, _b2, _c, _d, _e, _f, _g, _h;
+    let hasTimedOut = false;
+    const { maxRetryCount, timeoutMs } = retryConfig;
+    let effectiveType = "unknown", downlink = 0;
+    if ((_a2 = mergedOptions.network) == null ? void 0 : _a2.customNetworkInfo) {
+      effectiveType = mergedOptions.network.customNetworkInfo.effectiveType;
+      downlink = mergedOptions.network.customNetworkInfo.downlink;
+    } else {
+      const info = yield getNetworkInfo();
+      effectiveType = info.effectiveType;
+      downlink = info.downlink;
+    }
+    let adjustedRetryCount = maxRetryCount;
+    let adjustedDelay = retryConfig.initialRetryDelayMs;
+    if (((_b2 = mergedOptions.network) == null ? void 0 : _b2.adjustRetry) !== false) {
+      if (downlink < 1 || effectiveType.includes("2g")) {
+        adjustedRetryCount = maxRetryCount * 2;
+        adjustedDelay = retryConfig.initialRetryDelayMs * 2;
       }
-    )
-  },
-  /* @__PURE__ */ React2.createElement(LazyComponent, null),
-  " "
-);
-var prefetchDynamicImport = (importFunction) => {
-  const retryImport = getRetryImportFunction(importFunction, 0);
-  retryImport().then((module) => console.log("Component prefetched successfully.")).catch((error) => console.warn("Prefetching component failed:", error));
+    }
+    if (typeof ((_c = mergedOptions.retry) == null ? void 0 : _c.customDelayFn) === "function") {
+      adjustedDelay = mergedOptions.retry.customDelayFn(retryCount, error);
+    }
+    if (typeof ((_d = mergedOptions.retry) == null ? void 0 : _d.strategy) === "function") {
+      adjustedDelay = mergedOptions.retry.strategy(retryCount, error);
+    } else if (((_e = mergedOptions.retry) == null ? void 0 : _e.strategy) === "exponential") {
+      adjustedDelay = retryConfig.initialRetryDelayMs * Math.pow(2, retryCount);
+    } else if (((_f = mergedOptions.retry) == null ? void 0 : _f.strategy) === "linear") {
+      adjustedDelay = retryConfig.initialRetryDelayMs * (retryCount + 1);
+    }
+    const importUrl = cacheKey;
+    const cachedComponent = importUrl ? cache.get(importUrl) : null;
+    if (cachedComponent) return Promise.resolve(cachedComponent);
+    (_g = abortRef.current) == null ? void 0 : _g.abort();
+    abortRef.current = new AbortController();
+    const signal = abortRef.current.signal;
+    if (((_h = mergedOptions.mock) == null ? void 0 : _h.enabled) && mergedOptions.mock.mockImport) {
+      return mergedOptions.mock.mockImport();
+    }
+    let actualImportFunction = importFunction;
+    if (mergedOptions.importFrom && mergedOptions.importFrom !== "local") {
+    }
+    const maxConcurrent = mergedOptions.maxConcurrentLoads || 4;
+    return new Promise((resolve, reject) => {
+      enqueueLoad(() => {
+        const timeoutId = setTimeout(() => {
+          hasTimedOut = true;
+          dequeueLoad();
+          reject(new Error("Component load timed out."));
+        }, timeoutMs);
+        function tryLoadComponent(currentRetry) {
+          if (hasTimedOut || signal.aborted) {
+            clearTimeout(timeoutId);
+            dequeueLoad();
+            reject(new Error("Component load aborted."));
+            return;
+          }
+          const retryImport = getRetryImportFunction(actualImportFunction, currentRetry);
+          retryImport().then((module) => {
+            var _a3, _b3;
+            clearTimeout(timeoutId);
+            if (importUrl) cache.set(importUrl, module);
+            (_b3 = (_a3 = mergedOptions.retry) == null ? void 0 : _a3.onSuccess) == null ? void 0 : _b3.call(_a3, module);
+            dequeueLoad();
+            resolve(module);
+          }).catch((err) => {
+            var _a3, _b3, _c2, _d2, _e2, _f2, _g2, _h2, _i;
+            (_b3 = (_a3 = mergedOptions.retry) == null ? void 0 : _a3.onRetry) == null ? void 0 : _b3.call(_a3, currentRetry, err);
+            if (circuitBreaker.current.handleFailure()) {
+              clearTimeout(timeoutId);
+              (_d2 = (_c2 = mergedOptions.retry) == null ? void 0 : _c2.onError) == null ? void 0 : _d2.call(_c2, err);
+              dequeueLoad();
+              reject(err);
+              return;
+            }
+            if (typeof ((_e2 = mergedOptions.retry) == null ? void 0 : _e2.retryCondition) === "function" && !mergedOptions.retry.retryCondition(err)) {
+              clearTimeout(timeoutId);
+              (_g2 = (_f2 = mergedOptions.retry) == null ? void 0 : _f2.onError) == null ? void 0 : _g2.call(_f2, err);
+              dequeueLoad();
+              reject(err);
+              return;
+            }
+            if (currentRetry < adjustedRetryCount) {
+              setTimeout(() => tryLoadComponent(currentRetry + 1), (currentRetry + 1) * adjustedDelay);
+            } else {
+              clearTimeout(timeoutId);
+              (_i = (_h2 = mergedOptions.retry) == null ? void 0 : _h2.onError) == null ? void 0 : _i.call(_h2, err);
+              dequeueLoad();
+              reject(err);
+            }
+          });
+        }
+        tryLoadComponent(0);
+      }, maxConcurrent);
+    });
+  }), [importFunction, retryConfig, mergedOptions, retryCount, error]);
+  const [Component, setComponent] = useState2(() => lazy(loadComponent));
+  const reset = useCallback2(() => {
+    setRetryCount(0);
+    setError(null);
+    setComponent(() => lazy(loadComponent));
+  }, [loadComponent]);
+  const LazyWithErrorBoundary = React2.useMemo(() => {
+    return React2.lazy(
+      () => loadComponent().then((mod) => {
+        setError(null);
+        return mod;
+      }).catch((err) => {
+        setRetryCount((c) => c + 1);
+        setError(err);
+        throw err;
+      })
+    );
+  }, [loadComponent]);
+  useEffect2(() => {
+    return () => {
+      var _a2;
+      (_a2 = abortRef.current) == null ? void 0 : _a2.abort();
+    };
+  }, []);
+  return { Component: LazyWithErrorBoundary, retryCount, error, reset };
+}
+var LoaderThemeContext = createContext("light");
+function useLoaderTheme(theme) {
+  const contextTheme = useContext(LoaderThemeContext);
+  return theme || contextTheme || "light";
+}
+var LoaderAnimationRegistryContext = createContext({});
+function useLoaderAnimation(animationKey, customAnimation) {
+  const registry = useContext(LoaderAnimationRegistryContext);
+  if (customAnimation) return customAnimation;
+  if (animationKey && registry[animationKey]) return registry[animationKey];
+  return void 0;
+}
+var LazyLoader = (_a) => {
+  var _b = _a, {
+    importFunction,
+    options = {},
+    fallback
+  } = _b, rest = __objRest(_b, [
+    "importFunction",
+    "options",
+    "fallback"
+  ]);
+  var _a2, _b2, _c, _d, _e, _f;
+  const mergedOptions = useMergedOptions(options);
+  const { Component, retryCount, error, reset } = useRetryDynamicImport(importFunction, mergedOptions);
+  const loaderConfig = mergedOptions.loader || {};
+  const theme = useLoaderTheme(loaderConfig.theme);
+  const AnimationComponent = useLoaderAnimation(loaderConfig.animationKey, loaderConfig.customAnimation);
+  const loaderProps = {
+    retries: retryCount,
+    size: loaderConfig.size,
+    borderSize: loaderConfig.borderSize,
+    color: loaderConfig.color,
+    speed: loaderConfig.speed,
+    showRetries: loaderConfig.showRetries,
+    showNetworkInfo: loaderConfig.showNetworkInfo,
+    customStyle: loaderConfig.customStyle,
+    animation: loaderConfig.animation,
+    theme,
+    message: loaderConfig.loadingMessage,
+    "aria-label": loaderConfig.a11yLabel,
+    role: loaderConfig.a11yRole || "status"
+  };
+  const [showSpinner, setShowSpinner] = useState2(!((_a2 = loaderConfig.multiStage) == null ? void 0 : _a2.skeleton));
+  useEffect2(() => {
+    var _a3, _b3;
+    if (((_a3 = loaderConfig.multiStage) == null ? void 0 : _a3.skeleton) && loaderConfig.multiStage.delay) {
+      setShowSpinner(false);
+      const timer = setTimeout(() => setShowSpinner(true), loaderConfig.multiStage.delay);
+      return () => clearTimeout(timer);
+    } else if ((_b3 = loaderConfig.multiStage) == null ? void 0 : _b3.skeleton) {
+      setShowSpinner(false);
+      setTimeout(() => setShowSpinner(true), 300);
+    }
+  }, [loaderConfig.multiStage]);
+  if (typeof window === "undefined") {
+    if (loaderConfig.fallbackStrategy === "static" && loaderConfig.progressiveFallback) {
+      return /* @__PURE__ */ React2.createElement(React2.Fragment, null, loaderConfig.progressiveFallback);
+    }
+    const ssrFallback = (_b2 = mergedOptions.ssr) == null ? void 0 : _b2.fallback;
+    if (ssrFallback !== void 0 && ssrFallback !== null) {
+      return /* @__PURE__ */ React2.createElement(React2.Fragment, null, ssrFallback);
+    }
+    return null;
+  }
+  if (error) {
+    if (typeof loaderConfig.errorFallback === "function") {
+      return /* @__PURE__ */ React2.createElement(React2.Fragment, null, loaderConfig.errorFallback(error, reset));
+    }
+    if (typeof loaderConfig.fallbackStrategy === "function") {
+      return /* @__PURE__ */ React2.createElement(React2.Fragment, null, loaderConfig.fallbackStrategy(error));
+    }
+    if (loaderConfig.fallbackStrategy === "static" && loaderConfig.progressiveFallback) {
+      return /* @__PURE__ */ React2.createElement(React2.Fragment, null, loaderConfig.progressiveFallback);
+    }
+    if (loaderConfig.fallbackStrategy === "simple") {
+      let msg = "Failed to load.";
+      if (typeof loaderConfig.errorMessage === "function") {
+        msg = loaderConfig.errorMessage(error);
+      } else if (typeof loaderConfig.errorMessage === "string") {
+        msg = loaderConfig.errorMessage;
+      }
+      return /* @__PURE__ */ React2.createElement("div", null, msg);
+    }
+    if (loaderConfig.fallbackStrategy === "none") {
+      return null;
+    }
+    return loaderConfig.fallback ? /* @__PURE__ */ React2.createElement(React2.Fragment, null, loaderConfig.fallback) : /* @__PURE__ */ React2.createElement("div", { style: { textAlign: "center", padding: 24 }, role: "alert", "aria-live": "assertive" }, /* @__PURE__ */ React2.createElement("div", { style: { color: loaderConfig.errorColor || "red", marginBottom: 8 } }, loaderConfig.errorMessage ? typeof loaderConfig.errorMessage === "function" ? loaderConfig.errorMessage(error) : loaderConfig.errorMessage : `Error loading component: ${error.message}`), /* @__PURE__ */ React2.createElement(
+      "button",
+      {
+        onClick: reset,
+        style: loaderConfig.retryButtonStyle || { padding: "8px 16px", borderRadius: 4, cursor: "pointer" },
+        "aria-label": loaderConfig.retryButtonText || "Retry"
+      },
+      loaderConfig.retryButtonText || "Retry"
+    ));
+  }
+  if (mergedOptions.suspense === false) {
+    if (((_c = loaderConfig.multiStage) == null ? void 0 : _c.skeleton) && !showSpinner) {
+      return /* @__PURE__ */ React2.createElement(React2.Fragment, null, loaderConfig.multiStage.skeleton);
+    }
+    if (AnimationComponent) return /* @__PURE__ */ React2.createElement(AnimationComponent, __spreadValues({}, loaderProps));
+    return /* @__PURE__ */ React2.createElement(React2.Fragment, null, (_e = (_d = loaderConfig.customLoader) != null ? _d : fallback) != null ? _e : /* @__PURE__ */ React2.createElement(LoadingSpinner_default, __spreadValues({}, loaderProps)));
+  }
+  useEffect2(() => {
+    var _a3;
+    if (((_a3 = mergedOptions.log) == null ? void 0 : _a3.enabled) && mergedOptions.log.telemetryHook) {
+      mergedOptions.log.telemetryHook({ type: "mount", timestamp: Date.now() });
+    }
+    return () => {
+      var _a4;
+      if (((_a4 = mergedOptions.log) == null ? void 0 : _a4.enabled) && mergedOptions.log.telemetryHook) {
+        mergedOptions.log.telemetryHook({ type: "unmount", timestamp: Date.now() });
+      }
+    };
+  }, []);
+  return /* @__PURE__ */ React2.createElement(Suspense, { fallback: ((_f = loaderConfig.multiStage) == null ? void 0 : _f.skeleton) && !showSpinner ? loaderConfig.multiStage.skeleton : AnimationComponent ? /* @__PURE__ */ React2.createElement(AnimationComponent, __spreadValues({}, loaderProps)) : fallback || loaderConfig.customLoader || /* @__PURE__ */ React2.createElement(LoadingSpinner_default, __spreadValues({}, loaderProps)) }, /* @__PURE__ */ React2.createElement(Component, __spreadValues({}, rest)));
 };
-var priorityLoadComponent = (importFunction, priority) => {
-  setTimeout(() => retryDynamicImport(importFunction), priority * 1e3);
+function retryDynamicImport(importFunction, options) {
+  return (props) => /* @__PURE__ */ React2.createElement(
+    LazyLoader,
+    __spreadValues({
+      importFunction,
+      options
+    }, props)
+  );
+}
+var prefetchDynamicImport = (importFunction, options) => {
+  var _a, _b;
+  if (!(options == null ? void 0 : options.strategy) || options.strategy === "eager") {
+    const retryImport = getRetryImportFunction(importFunction, 0);
+    retryImport().then((module) => {
+      var _a2, _b2, _c;
+      (_a2 = options == null ? void 0 : options.onSuccess) == null ? void 0 : _a2.call(options);
+      if (((_b2 = options == null ? void 0 : options.cache) == null ? void 0 : _b2.enabled) && ((_c = options == null ? void 0 : options.cache) == null ? void 0 : _c.key)) {
+        defaultLFUCache.set(options.cache.key, module);
+      }
+    }).catch((error) => {
+      var _a2;
+      (_a2 = options == null ? void 0 : options.onError) == null ? void 0 : _a2.call(options, error);
+    });
+    return;
+  }
+  if (options.strategy === "idle" && typeof window !== "undefined" && "requestIdleCallback" in window) {
+    window.requestIdleCallback(() => prefetchDynamicImport(importFunction, __spreadProps(__spreadValues({}, options), { strategy: "eager" })));
+    return;
+  }
+  if (options.strategy === "on-hover" && ((_a = options.elementRef) == null ? void 0 : _a.current)) {
+    const el = options.elementRef.current;
+    const handler = () => prefetchDynamicImport(importFunction, __spreadProps(__spreadValues({}, options), { strategy: "eager" }));
+    el.addEventListener("mouseenter", handler, { once: true });
+    return;
+  }
+  if (options.strategy === "on-visible" && ((_b = options.elementRef) == null ? void 0 : _b.current) && typeof window !== "undefined") {
+    const el = options.elementRef.current;
+    const observer = new window.IntersectionObserver((entries, obs) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        prefetchDynamicImport(importFunction, __spreadProps(__spreadValues({}, options), { strategy: "eager" }));
+        obs.disconnect();
+      }
+    });
+    observer.observe(el);
+    return;
+  }
 };
+var priorityLoadComponent = (importFunction, options) => {
+  var _a;
+  const delay = (_a = options == null ? void 0 : options.delay) != null ? _a : (options == null ? void 0 : options.priority) ? options.priority * 1e3 : 0;
+  setTimeout(() => {
+    var _a2;
+    retryDynamicImport(importFunction);
+    (_a2 = options == null ? void 0 : options.onLoad) == null ? void 0 : _a2.call(options);
+  }, delay);
+};
+var loadQueue = [];
+var currentLoads = 0;
+function enqueueLoad(fn, maxConcurrent) {
+  if (currentLoads < maxConcurrent) {
+    currentLoads++;
+    fn();
+  } else {
+    loadQueue.push(fn);
+  }
+}
+function dequeueLoad() {
+  currentLoads = Math.max(0, currentLoads - 1);
+  if (loadQueue.length > 0) {
+    const next = loadQueue.shift();
+    if (next) {
+      currentLoads++;
+      next();
+    }
+  }
+}
 export {
   LazyLoader,
   prefetchDynamicImport,
