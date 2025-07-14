@@ -3,6 +3,18 @@ import { getNetworkInfo } from './networkSpeed';
 
 type LoaderAnimation = 'spinner' | 'dots' | 'wave' | 'bar';
 
+interface LoaderLabels {
+  retryLabel?: string;
+  speedLabel?: string;
+  typeLabel?: string;
+  saveDataLabel?: string;
+  saveDataOn?: string;
+  saveDataOff?: string;
+  gettingLabel?: string;
+  percentLabel?: (progress: number) => string;
+  messageLabel?: string;
+}
+
 interface LoaderProps {
   size?: number;
   borderSize?: number;
@@ -21,7 +33,20 @@ interface LoaderProps {
   message?: string;
   darkMode?: boolean;
   children?: ReactNode;
+  labels?: LoaderLabels;
 }
+
+const defaultLabels: LoaderLabels = {
+  retryLabel: 'تلاش مجدد',
+  speedLabel: 'سرعت',
+  typeLabel: 'نوع اتصال',
+  saveDataLabel: 'صرفه‌جویی دیتا',
+  saveDataOn: 'فعال',
+  saveDataOff: 'غیرفعال',
+  gettingLabel: 'در حال دریافت...',
+  percentLabel: (progress) => `${progress}%`,
+  messageLabel: '',
+};
 
 const Loader: React.FC<LoaderProps> = ({
   size = 60,
@@ -41,7 +66,9 @@ const Loader: React.FC<LoaderProps> = ({
   message,
   darkMode = false,
   children,
+  labels = {},
 }) => {
+  const mergedLabels = { ...defaultLabels, ...labels };
   const [networkInfo, setNetworkInfo] = useState<{ downlink: number | null; effectiveType: string; saveData: boolean }>({
     downlink: null,
     effectiveType: 'unknown',
@@ -49,16 +76,17 @@ const Loader: React.FC<LoaderProps> = ({
   });
 
   const updateNetworkInfo = useCallback(() => {
-    const info = getNetworkInfo();
-    setNetworkInfo((prevInfo) => {
-      if (
-        info.downlink !== prevInfo.downlink ||
-        info.effectiveType !== prevInfo.effectiveType ||
-        info.saveData !== prevInfo.saveData
-      ) {
-        return info;
-      }
-      return prevInfo;
+    getNetworkInfo().then((info) => {
+      setNetworkInfo((prevInfo) => {
+        if (
+          info.downlink !== prevInfo.downlink ||
+          info.effectiveType !== prevInfo.effectiveType ||
+          info.saveData !== prevInfo.saveData
+        ) {
+          return info;
+        }
+        return prevInfo;
+      });
     });
   }, []);
 
@@ -241,19 +269,19 @@ const Loader: React.FC<LoaderProps> = ({
       {animationType === 'wave' && renderWave()}
       {animationType === 'bar' && renderBar()}
       {typeof progress === 'number' && (
-        <div style={styles.progressText}>{progress}%</div>
+        <div style={styles.progressText}>{mergedLabels.percentLabel ? mergedLabels.percentLabel(progress) : `${progress}%`}</div>
       )}
-      {showRetries && <div style={styles.retryText}>تلاش مجدد: {retries}</div>}
+      {showRetries && <div style={styles.retryText}>{mergedLabels.retryLabel}: {retries}</div>}
       {showNetworkInfo && (
         <div style={styles.networkInfo}>
           <div>
-            سرعت:{' '}
+            {mergedLabels.speedLabel}: {' '}
             {networkInfo.downlink !== null
               ? `${networkInfo.downlink} Mbps`
-              : 'در حال دریافت...'}
+              : mergedLabels.gettingLabel}
           </div>
-          <div>نوع اتصال: {networkInfo.effectiveType}</div>
-          <div>صرفه‌جویی دیتا: {networkInfo.saveData ? 'فعال' : 'غیرفعال'}</div>
+          <div>{mergedLabels.typeLabel}: {networkInfo.effectiveType}</div>
+          <div>{mergedLabels.saveDataLabel}: {networkInfo.saveData ? mergedLabels.saveDataOn : mergedLabels.saveDataOff}</div>
         </div>
       )}
       {message && <div style={styles.message}>{message}</div>}

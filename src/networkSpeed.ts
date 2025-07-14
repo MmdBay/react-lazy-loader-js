@@ -1,45 +1,142 @@
-// This is our NetworkInfo interface. It’s what we’re gonna use to represent the user's network details.
-export interface NetworkInfo {
-  effectiveType: string; // This is the type of network connection, like '4g', '3g', or '2g'.
-  downlink: number; // This is the download speed in Mbps (megabits per second).
-  saveData: boolean; // This tells us if the user has their "data saver" mode on.
-}
-
-// Now, this NetworkInformation interface is what the browser gives us (if it supports the API).
-// It's similar to the one above but also lets us add/remove event listeners for when the connection changes.
-interface NetworkInformation {
-  effectiveType: string; // Same deal: network type ('4g', '3g', etc.)
-  downlink: number; // Download speed, still in Mbps.
-  saveData: boolean; // Whether or not data saver mode is turned on.
-  addEventListener?: (type: string, listener: EventListenerOrEventListenerObject) => void; // Optional: To listen for changes in the connection.
-  removeEventListener?: (type: string, listener: EventListenerOrEventListenerObject) => void; // Optional: To stop listening for those changes.
-}
-
-// Here we’re extending the Navigator interface to include the 'connection' property.
-// This is where the browser sticks the network information, if the browser supports it.
 declare global {
   interface Navigator {
-    connection?: NetworkInformation; // This is where we access network info, if available.
+    connection?: any;
   }
+}
+
+export interface NetworkInfo {
+  effectiveType: string;
+  type?: string;
+  downlink: number;
+  downlinkMax?: number;
+  rtt?: number;
+  saveData: boolean;
+  latency?: number;
+  lastTested: number;
+  isEstimate: boolean;
+  error?: string;
+}
+
+type NetworkChangeCallback = (info: NetworkInfo) => void;
+
+let cachedInfo: NetworkInfo | null = null;
+let cacheTime = 0;
+const CACHE_TTL = 30_000; // 30 seconds
+
+const listeners: Set<NetworkChangeCallback> = new Set();
+
+function getNavigatorConnection(): any {
+  if (typeof navigator !== 'undefined' && navigator.connection) {
+    return navigator.connection;
+  }
+  return null;
+}
+
+function buildInfoFromAPI(conn: any): NetworkInfo {
+  return {
+    effectiveType: conn.effectiveType || 'unknown',
+    type: conn.type,
+    downlink: conn.downlink ?? 0,
+    downlinkMax: conn.downlinkMax,
+    rtt: conn.rtt,
+    saveData: !!conn.saveData,
+    latency: conn.rtt,
+    lastTested: Date.now(),
+    isEstimate: false,
+  };
+}
+
+// Fallback: estimate speed by downloading a small image
+async function estimateSpeedByImage(): Promise<NetworkInfo> {
+  const imageUrl = 'https://www.google.com/images/phd/px.gif'; // 43 bytes
+  const start = Date.now();
+  let downlink = 0;
+  let latency = 0;
+  try {
+    const before = Date.now();
+    await fetch(imageUrl, { cache: 'no-store' });
+    const after = Date.now();
+    latency = after - before;
+    // Assume 43 bytes in latency ms = (43 * 8) / (latency / 1000) bits/sec
+    downlink = Math.max(0.01, (43 * 8) / (latency / 1000) / 1_000_000); // Mbps
+  } catch (e) {
+    // ignore
+  }
+  return {
+    effectiveType: 'unknown',
+    downlink,
+    saveData: false,
+    latency,
+    lastTested: Date.now(),
+    isEstimate: true,
+    error: downlink === 0 ? 'Could not estimate speed' : undefined,
+  };
 }
 
 /**
- * So, `getNetworkInfo` is the function that grabs network info from the browser.
- * If the browser supports the Network Information API, it’ll give us the connection details
- * like the type of network (e.g., 4G) and download speed. Otherwise, we return some default values.
- * 
- * @returns {NetworkInfo} - An object containing the network connection details (type, speed, and data saver status).
+ * Get the best available network info (sync, may be cached)
  */
-export function getNetworkInfo(): NetworkInfo {
-  // We try to access `navigator.connection`, where the browser stores network info (if it supports it).
-  const connection = navigator.connection;
-
-  // If the browser supports the API, grab and return the actual connection details.
-  if (connection) {
-    const { effectiveType, downlink, saveData } = connection;
-    return { effectiveType, downlink, saveData };
+export function getNetworkInfoSync(): NetworkInfo {
+  if (cachedInfo && Date.now() - cacheTime < CACHE_TTL) return cachedInfo;
+  const conn = getNavigatorConnection();
+  if (conn) {
+    cachedInfo = buildInfoFromAPI(conn);
+    cacheTime = Date.now();
+    return cachedInfo;
   }
+  // Fallback: return a default mock
+  return {
+    effectiveType: 'unknown',
+    downlink: 0,
+    saveData: false,
+    lastTested: Date.now(),
+    isEstimate: true,
+    error: 'No Network Information API',
+  };
+}
 
-  //If the browser doesn’t support the API, we just return some defaults.
-  return { effectiveType: 'unknown', downlink: 0, saveData: false }; // We don't know the type, speed is 0, and no data saver info.
+/**
+ * Get the best available network info (async, will try to estimate if needed)
+ */
+export async function getNetworkInfo(forceRefresh = false): Promise<NetworkInfo> {
+  if (!forceRefresh && cachedInfo && Date.now() - cacheTime < CACHE_TTL) return cachedInfo;
+  const conn = getNavigatorConnection();
+  if (conn) {
+    cachedInfo = buildInfoFromAPI(conn);
+    cacheTime = Date.now();
+    return cachedInfo;
+  }
+  // Fallback: estimate by image
+  cachedInfo = await estimateSpeedByImage();
+  cacheTime = Date.now();
+  return cachedInfo;
+}
+
+/**
+ * Subscribe to network info changes (browser only)
+ */
+export function subscribeNetworkInfo(cb: NetworkChangeCallback): () => void {
+  listeners.add(cb);
+  // Initial call
+  getNetworkInfo().then(cb);
+  // Listen for changes
+  const conn = getNavigatorConnection();
+  if (conn && conn.addEventListener) {
+    const handler = () => getNetworkInfo().then(cb);
+    conn.addEventListener('change', handler);
+    return () => {
+      listeners.delete(cb);
+      conn.removeEventListener('change', handler);
+    };
+  }
+  // No real event, just unsubscribe
+  return () => listeners.delete(cb);
+}
+
+/**
+ * Manually refresh and update all listeners
+ */
+export async function refreshNetworkInfo() {
+  const info = await getNetworkInfo(true);
+  listeners.forEach((cb) => cb(info));
 }

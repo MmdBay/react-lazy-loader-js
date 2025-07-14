@@ -3,156 +3,54 @@
 
 [![npm version](https://badge.fury.io/js/react-lazy-loader-js.svg)](https://badge.fury.io/js/react-lazy-loader-js)
 
-`react-lazy-loader-js` is a smart loader for dynamically imported React components with retry, caching, and priority loading mechanisms. It provides features like dynamic retries, caching of loaded components, circuit breaker logic, prefetching, and priority loading to optimize the loading of React components in your app. You can also adjust the retry logic based on the user's internet speed and connection type.
+`react-lazy-loader-js` is a highly flexible, production-grade loader for dynamically importing React components. It features robust retry logic, advanced caching, circuit breaker support, prefetching, priority and batch loading, SSR/SSG compatibility, context-based configuration, theme and animation registries, accessibility, and much more. Designed for both enterprise and open source projects, it gives you full control over how your components are loaded, retried, and displayed.
 
-## 🔥 Features
+---
 
-- **Dynamic Retry Logic**: Automatically retries loading React components if the import fails due to network issues or other errors. Adjust the retry count and delay based on the user's network quality.
-- **Caching**: Caches successfully loaded components to speed up future loads using an LFU (Least Frequently Used) caching mechanism.
-- **Circuit Breaker**: Prevents excessive retries by implementing a circuit breaker pattern, stopping retries after a configurable threshold and resetting after a set time.
-- **Prefetching**: Prefetch components before they are needed to improve the user experience.
-- **Priority Loading**: Load less important components with a delay while prioritizing critical components.
-- **Customizable Loader**: Display retries, show network info, and style the loader however you want.
+## 🚀 Features
 
-## Installation
+- **Dynamic Retry Logic**: Smart, customizable retry strategies (exponential, linear, custom) for failed imports.
+- **Advanced Caching**: LFU, LRU, memory, localStorage, IndexedDB, or custom cache support.
+- **Circuit Breaker**: Prevents excessive retries and protects your app from repeated failures.
+- **Prefetching & Priority Loading**: Prefetch on hover, idle, visible, or immediately; batch and prioritize loads.
+- **Context & Global Config**: Set global defaults for all loaders using React context.
+- **SSR/SSG & Suspense-less**: Works seamlessly with server-side rendering and can operate without React.Suspense.
+- **Theme & Animation Registry**: Register and use custom themes and loader animations globally.
+- **Multi-Stage Loading**: Skeleton → spinner → content, with full control over each stage.
+- **Error Boundaries & Recovery**: Custom error fallback, retry, and progressive enhancement/fallback strategies.
+- **Accessibility (A11y)**: ARIA roles, labels, and screen reader support out of the box.
+- **Telemetry & Logging**: Hook into loader events for analytics, monitoring, or debugging.
+- **Remote/CDN Import**: Support for loading modules from remote or CDN sources.
+- **Test/Mock API**: Easily mock dynamic imports for testing environments.
+- **Batching & Concurrency**: Control the number of concurrent loads and queue the rest.
+- **Progressive Enhancement**: Fallback to static or simpler components if dynamic import fails or is unsupported.
 
-You can install the package using npm or yarn:
+---
+
+## 📦 Installation
 
 ```bash
 npm install react-lazy-loader-js
 ```
 
-# Usage
+Or with yarn:
 
-## 🆕 New in Version 1.1.0: Customizable Loader
-#### You asked for it, and here it is—a fully customizable loader that shows retry counts, network speed, and lets you style it your way.
+```bash
+yarn add react-lazy-loader-js
+```
 
-### 🚀 How to Use the Custom Loader:
-Example with Custom Loader Configuration:
+---
 
-```typescript
+## 🚀 Quick Start
+
+### Basic Usage
+
+```tsx
+import React from 'react';
 import { retryDynamicImport, LazyLoader } from 'react-lazy-loader-js';
 
+// Simple dynamic import with retry
 const LazyComponent = retryDynamicImport(() => import('./MyComponent'));
-
-function App() {
-  const configLoader = {
-    size: 60, // Size of the spinner in pixels
-    borderSize: 5, // Border thickness of the loader
-    color: 'blue', // Loader color
-    speed: 2, // Speed of the spinner in seconds
-    showRetries: true, // Show retry count below the loader
-    showNetworkInfo: true, // Show network speed info inside the loader
-    customStyle: { backgroundColor: 'rgba(255, 255, 255, 0.8)' } // Custom background styling
-  };
-  
-  return (
-    <div>
-      <LazyLoader LazyComponent={LazyComponent} loaderConfig={configLoader} retryCount={0} />
-    </div>
-  );
-}
-
-export default App;
-```
-Loader Configuration Options:
-
-- size: The size of the loader spinner (in pixels).
-- borderSize: Thickness of the loader’s border.
-- color: Color of the loader’s border.
-- speed: Speed of rotation (in seconds).
-- showRetries: Boolean that enables/disables showing retry attempts below the loader.
-- showNetworkInfo: Boolean to show/hide network speed and connection type inside the loader.
-- customStyle: Add your own custom styles to the loader container (e.g., background color).
-
-
-The package provides three main utilities: `retryDynamicImport`, `prefetchDynamicImport`, and `priorityLoadComponent`.
-
-### 1. retryDynamicImport
-
-This function allows you to dynamically import a React component with retry logic, caching, and circuit breaker functionality. It also adjusts retry logic based on the user's network speed and connection type.
-
-```typescript
-import { retryDynamicImport } from 'react-lazy-loader-js';
-
-const LazyComponent = retryDynamicImport(() => import('./MyComponent'));
-
-function App() {
-  return (
-    <div>
-      <h1>My App</h1>
-      <React.Suspense fallback={<div>Loading...</div>}>
-        <LazyComponent />
-      </React.Suspense>
-    </div>
-  );
-}
-
-export default App;
-```
-
-### 2. prefetchDynamicImport
-
-Use this function to prefetch components before they are needed, reducing the load time when the user navigates to that part of the app.
-
-```typescript
-import { prefetchDynamicImport } from 'react-lazy-loader-js';
-
-// Prefetch a component
-prefetchDynamicImport(() => import('./MyComponent'));
-
-// You can call this function when you expect the user to navigate to that component soon
-```
-
-### 3. priorityLoadComponent
-
-Use `priorityLoadComponent` to load less important components after a delay, giving higher priority to critical components.
-
-```typescript
-import { priorityLoadComponent } from 'react-lazy-loader-js';
-
-// Delay the loading of a component with a priority value (in seconds)
-priorityLoadComponent(() => import('./LowPriorityComponent'), 5);
-```
-
-# Configuration
-
-`retryDynamicImport` supports configuration through an optional second parameter. You can customize the retry behavior, timeout, circuit breaker settings, and network-based adjustments.
-
-### Default Configuration
-
-```typescript
-const defaultConfig = {
-  maxRetryCount: 5,                // Max retry attempts
-  initialRetryDelayMs: 500,         // Initial delay between retries (in milliseconds)
-  maxRetryDelayMs: 5000,            // Maximum delay between retries
-  timeoutMs: 10000,                 // Timeout for loading a component
-  circuitBreakerThreshold: 3,       // Max consecutive failures before circuit breaker activates
-  resetTimeMs: 30000,               // Circuit breaker reset time (in milliseconds)
-  // Network-based adjustments
-  adjustForNetwork: true            // Adjust retry logic based on network speed and type
-};
-```
-
-### Example with Custom Configuration
-
-You can override the default configuration with your custom settings:
-
-```typescript
-import { retryDynamicImport } from 'react-lazy-loader-js';
-
-const LazyComponent = retryDynamicImport(
-  () => import('./MyComponent'),
-  {
-    maxRetryCount: 10,
-    initialRetryDelayMs: 1000,
-    maxRetryDelayMs: 10000,
-    timeoutMs: 20000,
-    circuitBreakerThreshold: 5,
-    resetTimeMs: 60000,
-    adjustForNetwork: false  // Disable network-based adjustments
-  }
-);
 
 function App() {
   return (
@@ -161,84 +59,1015 @@ function App() {
     </React.Suspense>
   );
 }
-
-export default App;
 ```
 
-### Network-Based Adjustments
+### Advanced Usage with LazyLoader Component
 
-By default, `retryDynamicImport` adjusts its retry behavior based on the user's internet connection type and speed using the Network Information API. This allows for smarter retry logic, such as increasing retry attempts or delay when the connection is slow (e.g., on 2G or slow 3G networks).
+```tsx
+import React from 'react';
+import { LazyLoader } from 'react-lazy-loader-js';
 
-- **Effective Network Type**: The library checks the user's network type (e.g., 2G, 3G, 4G, etc.).
-- **Downlink Speed**: If the download speed is too low, the retry delay and count are automatically adjusted.
+function App() {
+  return (
+    <LazyLoader
+      importFunction={() => import('./MyComponent')}
+      options={{
+        retry: {
+          maxCount: 3,
+          strategy: 'exponential',
+          baseDelay: 1000,
+        },
+        loader: {
+          theme: 'dark',
+          animation: 'pulse',
+          size: 'medium',
+        },
+        cache: {
+          type: 'lfu',
+          maxAge: 3600000, // 1 hour
+        },
+      }}
+    />
+  );
+}
+```
 
-If you want to disable this feature, set `adjustForNetwork` to `false` in the configuration.
+---
 
-```typescript
-const customConfig = {
-  adjustForNetwork: false // Disable network-based adjustments
+## 📚 Complete API Documentation
+
+### Core Functions
+
+#### `retryDynamicImport(importFunction, options?)`
+
+Creates a lazy React component with advanced retry and loading capabilities.
+
+**Parameters:**
+- `importFunction`: Function that returns a dynamic import promise
+- `options`: Configuration object (optional)
+
+**Returns:** A React component that can be used with React.Suspense
+
+**Example:**
+```tsx
+import { retryDynamicImport } from 'react-lazy-loader-js';
+
+const LazyComponent = retryDynamicImport(
+  () => import('./MyComponent'),
+  {
+    retry: {
+      maxCount: 5,
+      strategy: 'exponential',
+      baseDelay: 1000,
+      maxDelay: 10000,
+    },
+    cache: {
+      type: 'lfu',
+      maxSize: 100,
+      maxAge: 3600000,
+    },
+    loader: {
+      theme: 'light',
+      animation: 'wave',
+      size: 'large',
+      text: 'Loading component...',
+    },
+  }
+);
+```
+
+#### `LazyLoader` Component
+
+A React component that provides full control over lazy loading behavior.
+
+**Props:**
+- `importFunction`: Function that returns a dynamic import promise
+- `options`: Complete configuration object
+- `children`: Optional children to render when component is loaded
+- `fallback`: Optional custom fallback component
+
+**Example:**
+```tsx
+import { LazyLoader } from 'react-lazy-loader-js';
+
+function App() {
+  return (
+    <LazyLoader
+      importFunction={() => import('./MyComponent')}
+      options={{
+        retry: {
+          maxCount: 3,
+          strategy: 'linear',
+          baseDelay: 500,
+        },
+        loader: {
+          theme: 'dark',
+          animation: 'spin',
+          size: 'medium',
+          text: 'Loading user profile...',
+        },
+        cache: {
+          type: 'memory',
+          maxSize: 50,
+        },
+        errorFallback: (error, retry) => (
+          <div>
+            <p>Failed to load: {error.message}</p>
+            <button onClick={retry}>Retry</button>
+          </div>
+        ),
+      }}
+    />
+  );
+}
+```
+
+### Configuration Options
+
+#### Retry Configuration
+
+```tsx
+retry: {
+  maxCount: 3,                    // Maximum number of retry attempts
+  strategy: 'exponential',        // 'exponential', 'linear', 'custom'
+  baseDelay: 1000,               // Base delay in milliseconds
+  maxDelay: 10000,               // Maximum delay in milliseconds
+  backoffMultiplier: 2,          // Multiplier for exponential backoff
+  jitter: true,                  // Add random jitter to delays
+  onRetry: (attempt, error) => {}, // Callback on each retry
+  shouldRetry: (error) => true,  // Custom retry condition
+}
+```
+
+#### Loader Configuration
+
+```tsx
+loader: {
+  theme: 'light',                // 'light', 'dark', 'custom'
+  animation: 'spin',             // 'spin', 'pulse', 'wave', 'bounce', 'custom'
+  size: 'medium',                // 'small', 'medium', 'large', 'custom'
+  text: 'Loading...',            // Loading text
+  showText: true,                // Whether to show loading text
+  className: 'custom-loader',    // Custom CSS class
+  style: { color: 'blue' },      // Custom inline styles
+  glow: true,                    // Enable glow effect
+  pulse: true,                   // Enable pulse effect
+  gradient: true,                // Enable gradient effect
+  customAnimation: MyAnimation,  // Custom animation component
+}
+```
+
+#### Cache Configuration
+
+```tsx
+cache: {
+  type: 'lfu',                   // 'lfu', 'lru', 'memory', 'localStorage', 'indexedDB', 'custom'
+  maxSize: 100,                  // Maximum number of cached items
+  maxAge: 3600000,               // Maximum age in milliseconds
+  keyGenerator: (importFn) => '', // Custom cache key generator
+  storage: customStorage,        // Custom storage implementation
+  onHit: (key) => {},            // Callback on cache hit
+  onMiss: (key) => {},           // Callback on cache miss
+  onEvict: (key, value) => {},   // Callback on cache eviction
+}
+```
+
+#### Error Handling Configuration
+
+```tsx
+errorFallback: (error, retry, reset) => {
+  return (
+    <div>
+      <p>Error: {error.message}</p>
+      <button onClick={retry}>Retry</button>
+      <button onClick={reset}>Reset</button>
+    </div>
+  );
+},
+fallbackStrategy: 'retry',       // 'retry', 'static', 'progressive'
+progressiveFallback: <div>Static fallback</div>,
+```
+
+#### SSR/SSG Configuration
+
+```tsx
+ssr: {
+  fallback: <div>SSR fallback</div>, // Fallback for server-side rendering
+  enabled: true,                 // Enable SSR support
+  suspense: false,               // Disable React.Suspense
+  preload: false,                // Preload on server
+}
+```
+
+#### Accessibility Configuration
+
+```tsx
+a11y: {
+  label: 'Loading component...',  // ARIA label
+  role: 'status',                // ARIA role
+  live: 'polite',                // ARIA live region
+  describedBy: 'loading-desc',   // ARIA described by
+}
+```
+
+#### Telemetry Configuration
+
+```tsx
+log: {
+  enabled: true,                 // Enable logging
+  level: 'info',                 // 'debug', 'info', 'warn', 'error'
+  telemetryHook: (event) => {},  // Custom telemetry hook
+  events: ['load', 'retry', 'error', 'cache'], // Events to log
+}
+```
+
+### Context Providers
+
+#### `LazyLoaderProvider`
+
+Provides global configuration for all lazy loaders in the app.
+
+```tsx
+import { LazyLoaderProvider } from 'react-lazy-loader-js';
+
+const globalConfig = {
+  retry: {
+    maxCount: 3,
+    strategy: 'exponential',
+    baseDelay: 1000,
+  },
+  loader: {
+    theme: 'dark',
+    animation: 'wave',
+    size: 'medium',
+  },
+  cache: {
+    type: 'lfu',
+    maxSize: 100,
+    maxAge: 3600000,
+  },
+  log: {
+    enabled: true,
+    level: 'info',
+  },
+};
+
+function App() {
+  return (
+    <LazyLoaderProvider value={globalConfig}>
+      {/* All lazy loaders will inherit this configuration */}
+      <YourApp />
+    </LazyLoaderProvider>
+  );
+}
+```
+
+#### `LoaderThemeProvider`
+
+Provides global theme for all loaders.
+
+```tsx
+import { LoaderThemeProvider } from 'react-lazy-loader-js';
+
+function App() {
+  return (
+    <LoaderThemeProvider value="dark">
+      {/* All loaders will use dark theme by default */}
+      <YourApp />
+    </LoaderThemeProvider>
+  );
+}
+```
+
+#### `LoaderAnimationRegistryProvider`
+
+Registers custom loader animations globally.
+
+```tsx
+import { LoaderAnimationRegistryProvider } from 'react-lazy-loader-js';
+import MyCustomAnimation from './MyCustomAnimation';
+
+const animationRegistry = {
+  myCustom: MyCustomAnimation,
+  anotherCustom: AnotherCustomAnimation,
+};
+
+function App() {
+  return (
+    <LoaderAnimationRegistryProvider value={animationRegistry}>
+      {/* Custom animations can now be used by name */}
+      <YourApp />
+    </LoaderAnimationRegistryProvider>
+  );
+}
+```
+
+### Utility Functions
+
+#### `prefetchDynamicImport(importFunction, options?)`
+
+Prefetches a component using various strategies.
+
+```tsx
+import { prefetchDynamicImport } from 'react-lazy-loader-js';
+
+// Prefetch immediately
+prefetchDynamicImport(() => import('./MyComponent'));
+
+// Prefetch on hover
+const ref = useRef(null);
+prefetchDynamicImport(() => import('./MyComponent'), {
+  strategy: 'on-hover',
+  elementRef: ref,
+});
+
+// Prefetch when idle
+prefetchDynamicImport(() => import('./MyComponent'), {
+  strategy: 'idle',
+  timeout: 5000,
+});
+
+// Prefetch when visible
+prefetchDynamicImport(() => import('./MyComponent'), {
+  strategy: 'on-visible',
+  threshold: 0.1,
+});
+```
+
+**Strategy Options:**
+- `'eager'`: Prefetch immediately
+- `'idle'`: Prefetch when browser is idle
+- `'on-hover'`: Prefetch when element is hovered
+- `'on-visible'`: Prefetch when element becomes visible
+- `'on-focus'`: Prefetch when element receives focus
+
+#### `priorityLoadComponent(importFunction, options?)`
+
+Loads a component with priority and delay.
+
+```tsx
+import { priorityLoadComponent } from 'react-lazy-loader-js';
+
+// Load with priority
+priorityLoadComponent(() => import('./LowPriorityComponent'), {
+  priority: 2,
+  delay: 2000,
+});
+
+// Load after user interaction
+priorityLoadComponent(() => import('./Component'), {
+  priority: 1,
+  trigger: 'user-interaction',
+});
+```
+
+### Advanced Features
+
+#### Multi-Stage Loading
+
+```tsx
+<LazyLoader
+  importFunction={() => import('./MyComponent')}
+  options={{
+    loader: {
+      multiStage: {
+        skeleton: <div className="skeleton-loader" />,
+        delay: 500, // Show skeleton for 500ms before spinner
+        transition: 'fade', // Transition type
+      },
+    },
+  }}
+/>
+```
+
+#### Circuit Breaker
+
+```tsx
+<LazyLoader
+  importFunction={() => import('./MyComponent')}
+  options={{
+    circuitBreaker: {
+      enabled: true,
+      failureThreshold: 5,
+      recoveryTimeout: 30000,
+      onOpen: () => console.log('Circuit breaker opened'),
+      onClose: () => console.log('Circuit breaker closed'),
+    },
+  }}
+/>
+```
+
+#### Batching and Concurrency
+
+```tsx
+<LazyLoader
+  importFunction={() => import('./MyComponent')}
+  options={{
+    batching: {
+      enabled: true,
+      maxConcurrent: 3,
+      batchSize: 5,
+      delay: 100,
+    },
+  }}
+/>
+```
+
+#### Remote/CDN Import
+
+```tsx
+<LazyLoader
+  importFunction={() => import('./MyComponent')}
+  options={{
+    importFrom: {
+      type: 'cdn',
+      baseUrl: 'https://cdn.example.com',
+      fallback: 'local',
+    },
+  }}
+/>
+```
+
+#### Mock/Test API
+
+```tsx
+<LazyLoader
+  importFunction={() => import('./MyComponent')}
+  options={{
+    mock: {
+      enabled: process.env.NODE_ENV === 'test',
+      mockImport: async () => ({
+        default: () => <div>Mocked Component</div>,
+      }),
+      delay: 100, // Simulate loading delay
+    },
+  }}
+/>
+```
+
+### Custom Hooks
+
+#### `useRetryDynamicImport`
+
+Custom hook for advanced retry logic with abort support.
+
+```tsx
+import { useRetryDynamicImport } from 'react-lazy-loader-js';
+
+function MyComponent() {
+  const { load, loading, error, retry, abort } = useRetryDynamicImport(
+    () => import('./MyComponent'),
+    {
+      maxCount: 3,
+      strategy: 'exponential',
+    }
+  );
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
+  return <div>Component loaded!</div>;
+}
+```
+
+#### `useLoaderTelemetry`
+
+Custom hook for telemetry and logging.
+
+```tsx
+import { useLoaderTelemetry } from 'react-lazy-loader-js';
+
+function MyComponent() {
+  const { logEvent, getMetrics } = useLoaderTelemetry();
+
+  const handleLoad = () => {
+    logEvent('component_load_start', { component: 'MyComponent' });
+    // ... load logic
+    logEvent('component_load_success', { component: 'MyComponent' });
+  };
+
+  return <button onClick={handleLoad}>Load Component</button>;
+}
+```
+
+### Error Handling
+
+#### Custom Error Boundaries
+
+```tsx
+import { LazyLoaderErrorBoundary } from 'react-lazy-loader-js';
+
+function App() {
+  return (
+    <LazyLoaderErrorBoundary
+      fallback={(error, retry) => (
+        <div>
+          <h2>Something went wrong</h2>
+          <p>{error.message}</p>
+          <button onClick={retry}>Try Again</button>
+        </div>
+      )}
+    >
+      <LazyComponent />
+    </LazyLoaderErrorBoundary>
+  );
+}
+```
+
+#### Progressive Enhancement
+
+```tsx
+<LazyLoader
+  importFunction={() => import('./MyComponent')}
+  options={{
+    progressive: {
+      enabled: true,
+      fallback: <StaticComponent />,
+      strategy: 'graceful-degradation',
+    },
+  }}
+/>
+```
+
+### Performance Optimization
+
+#### Memory Management
+
+```tsx
+<LazyLoader
+  importFunction={() => import('./MyComponent')}
+  options={{
+    memory: {
+      cleanup: true,
+      maxAge: 300000, // 5 minutes
+      onCleanup: (key) => console.log('Cleaned up:', key),
+    },
+  }}
+/>
+```
+
+#### Network Optimization
+
+```tsx
+<LazyLoader
+  importFunction={() => import('./MyComponent')}
+  options={{
+    network: {
+      adaptive: true,
+      speedThreshold: 1000, // 1Mbps
+      compression: true,
+      preload: 'metadata',
+    },
+  }}
+/>
+```
+
+---
+
+## 🎨 Customization
+
+### Custom Loader Themes
+
+```tsx
+import { registerLoaderTheme } from 'react-lazy-loader-js';
+
+const customTheme = {
+  name: 'custom',
+  colors: {
+    primary: '#007bff',
+    secondary: '#6c757d',
+    background: '#f8f9fa',
+  },
+  styles: {
+    container: 'custom-loader-container',
+    spinner: 'custom-loader-spinner',
+    text: 'custom-loader-text',
+  },
+};
+
+registerLoaderTheme(customTheme);
+```
+
+### Custom Animations
+
+```tsx
+import { registerLoaderAnimation } from 'react-lazy-loader-js';
+
+const CustomAnimation = ({ size, theme, text }) => (
+  <div className={`custom-animation ${size} ${theme}`}>
+    <div className="spinner" />
+    {text && <span>{text}</span>}
+  </div>
+);
+
+registerLoaderAnimation('custom', CustomAnimation);
+```
+
+### Custom Cache Implementation
+
+```tsx
+import { createCustomCache } from 'react-lazy-loader-js';
+
+const customCache = createCustomCache({
+  get: (key) => {
+    // Custom get logic
+  },
+  set: (key, value, options) => {
+    // Custom set logic
+  },
+  delete: (key) => {
+    // Custom delete logic
+  },
+  clear: () => {
+    // Custom clear logic
+  },
+});
+```
+
+---
+
+## 🔧 Configuration Reference
+
+### Complete Options Object
+
+```tsx
+const completeOptions = {
+  // Retry configuration
+  retry: {
+    maxCount: 3,
+    strategy: 'exponential',
+    baseDelay: 1000,
+    maxDelay: 10000,
+    backoffMultiplier: 2,
+    jitter: true,
+    onRetry: (attempt, error) => {},
+    shouldRetry: (error) => true,
+  },
+
+  // Loader configuration
+  loader: {
+    theme: 'light',
+    animation: 'spin',
+    size: 'medium',
+    text: 'Loading...',
+    showText: true,
+    className: '',
+    style: {},
+    glow: true,
+    pulse: true,
+    gradient: true,
+    customAnimation: null,
+    multiStage: {
+      skeleton: null,
+      delay: 0,
+      transition: 'fade',
+    },
+  },
+
+  // Cache configuration
+  cache: {
+    type: 'lfu',
+    maxSize: 100,
+    maxAge: 3600000,
+    keyGenerator: null,
+    storage: null,
+    onHit: null,
+    onMiss: null,
+    onEvict: null,
+  },
+
+  // Error handling
+  errorFallback: null,
+  fallbackStrategy: 'retry',
+  progressiveFallback: null,
+
+  // SSR/SSG
+  ssr: {
+    fallback: null,
+    enabled: true,
+    suspense: true,
+    preload: false,
+  },
+
+  // Accessibility
+  a11y: {
+    label: 'Loading...',
+    role: 'status',
+    live: 'polite',
+    describedBy: null,
+  },
+
+  // Telemetry
+  log: {
+    enabled: false,
+    level: 'info',
+    telemetryHook: null,
+    events: ['load', 'retry', 'error', 'cache'],
+  },
+
+  // Circuit breaker
+  circuitBreaker: {
+    enabled: false,
+    failureThreshold: 5,
+    recoveryTimeout: 30000,
+    onOpen: null,
+    onClose: null,
+  },
+
+  // Batching
+  batching: {
+    enabled: false,
+    maxConcurrent: 3,
+    batchSize: 5,
+    delay: 100,
+  },
+
+  // Import options
+  importFrom: {
+    type: 'local',
+    baseUrl: null,
+    fallback: null,
+  },
+
+  // Mock/Test
+  mock: {
+    enabled: false,
+    mockImport: null,
+    delay: 0,
+  },
+
+  // Memory management
+  memory: {
+    cleanup: false,
+    maxAge: 300000,
+    onCleanup: null,
+  },
+
+  // Network optimization
+  network: {
+    adaptive: false,
+    speedThreshold: 1000,
+    compression: false,
+    preload: null,
+  },
+
+  // Progressive enhancement
+  progressive: {
+    enabled: false,
+    fallback: null,
+    strategy: 'graceful-degradation',
+  },
 };
 ```
 
-# How It Works
+---
 
-- **Retries on Failure**: If a component fails to load due to a network issue, the function retries based on the configured `maxRetryCount`. The retry delay increases exponentially to avoid overloading the network or server.
-- **Caching**: Successfully loaded components are cached in-memory using an LFU (Least Frequently Used) cache mechanism, so the next time the component is needed, it loads instantly from the cache.
-- **Circuit Breaker**: If the component fails to load after a certain number of retries, the circuit breaker prevents further retries for a configured amount of time (`resetTimeMs`).
-- **Prefetching**: You can prefetch components to improve loading times for users when they navigate to that part of the app.
-- **Priority Loading**: Load less critical components after a delay, prioritizing essential components first.
+## 🧪 Testing
 
-# Examples
+### Unit Testing
 
-### Example with Prefetching
+```tsx
+import { render, screen } from '@testing-library/react';
+import { retryDynamicImport } from 'react-lazy-loader-js';
 
-```typescript
-import { retryDynamicImport, prefetchDynamicImport } from 'react-lazy-loader-js';
+// Mock dynamic import
+jest.mock('./MyComponent', () => ({
+  __esModule: true,
+  default: () => <div>Mocked Component</div>,
+}));
 
-const LazyComponent = retryDynamicImport(() => import('./MyComponent'));
-
-// Prefetch the component when the app starts
-prefetchDynamicImport(() => import('./MyComponent'));
-
-function App() {
-  return (
-    <div>
-      <h1>My App</h1>
-      <React.Suspense fallback={<div>Loading...</div>}>
-        <LazyComponent />
-      </React.Suspense>
-    </div>
+test('renders lazy component', async () => {
+  const LazyComponent = retryDynamicImport(() => import('./MyComponent'));
+  
+  render(
+    <React.Suspense fallback={<div>Loading...</div>}>
+      <LazyComponent />
+    </React.Suspense>
   );
-}
 
-export default App;
+  expect(screen.getByText('Loading...')).toBeInTheDocument();
+  
+  await screen.findByText('Mocked Component');
+  expect(screen.getByText('Mocked Component')).toBeInTheDocument();
+});
 ```
 
-### Example with Priority Loading
+### Integration Testing
 
-```typescript
-import { retryDynamicImport, priorityLoadComponent } from 'react-lazy-loader-js';
+```tsx
+import { render, screen, fireEvent } from '@testing-library/react';
+import { LazyLoader } from 'react-lazy-loader-js';
 
-// Higher priority component
-const ImportantComponent = retryDynamicImport(() => import('./ImportantComponent'));
-
-// Lower priority component (delayed by 5 seconds)
-priorityLoadComponent(() => import('./LowPriorityComponent'), 5);
-
-function App() {
-  return (
-    <div>
-      <h1>My App</h1>
-      <React.Suspense fallback={<div>Loading important component...</div>}>
-        <ImportantComponent />
-      </React.Suspense>
-    </div>
+test('handles retry on error', async () => {
+  const mockImport = jest.fn().mockRejectedValueOnce(new Error('Network error'));
+  
+  render(
+    <LazyLoader
+      importFunction={mockImport}
+      options={{
+        retry: { maxCount: 2 },
+        errorFallback: (error, retry) => (
+          <button onClick={retry}>Retry</button>
+        ),
+      }}
+    />
   );
-}
 
-export default App;
+  await screen.findByText('Retry');
+  fireEvent.click(screen.getByText('Retry'));
+  
+  expect(mockImport).toHaveBeenCalledTimes(2);
+});
 ```
 
-## License
+---
 
-This project is licensed under the MIT License. See the LICENSE file for details.
+## 🚀 Performance Best Practices
+
+### 1. Use Appropriate Cache Strategy
+
+```tsx
+// For frequently accessed components
+cache: { type: 'lfu', maxSize: 50 }
+
+// For large components with limited memory
+cache: { type: 'lru', maxSize: 20 }
+
+// For persistent caching
+cache: { type: 'localStorage', maxAge: 86400000 }
+```
+
+### 2. Implement Smart Prefetching
+
+```tsx
+// Prefetch critical components immediately
+prefetchDynamicImport(() => import('./CriticalComponent'), {
+  strategy: 'eager',
+});
+
+// Prefetch on user interaction
+prefetchDynamicImport(() => import('./UserProfile'), {
+  strategy: 'on-hover',
+});
+```
+
+### 3. Use Circuit Breaker for Unreliable APIs
+
+```tsx
+circuitBreaker: {
+  enabled: true,
+  failureThreshold: 3,
+  recoveryTimeout: 60000,
+}
+```
+
+### 4. Optimize for Network Conditions
+
+```tsx
+network: {
+  adaptive: true,
+  speedThreshold: 1000, // 1Mbps
+  compression: true,
+}
+```
+
+### 5. Implement Progressive Enhancement
+
+```tsx
+progressive: {
+  enabled: true,
+  fallback: <StaticComponent />,
+  strategy: 'graceful-degradation',
+}
+```
+
+---
+
+## 🔍 Troubleshooting
+
+### Common Issues
+
+#### 1. Component Not Loading
+
+```tsx
+// Check if dynamic import is working
+const LazyComponent = retryDynamicImport(() => import('./MyComponent'), {
+  log: { enabled: true, level: 'debug' },
+});
+```
+
+#### 2. Retry Not Working
+
+```tsx
+// Ensure retry configuration is correct
+retry: {
+  maxCount: 3,
+  strategy: 'exponential',
+  shouldRetry: (error) => {
+    // Only retry network errors
+    return error.name === 'NetworkError';
+  },
+}
+```
+
+#### 3. Cache Not Working
+
+```tsx
+// Check cache configuration
+cache: {
+  type: 'lfu',
+  maxSize: 100,
+  onHit: (key) => console.log('Cache hit:', key),
+  onMiss: (key) => console.log('Cache miss:', key),
+}
+```
+
+#### 4. SSR Issues
+
+```tsx
+// Ensure SSR is properly configured
+ssr: {
+  enabled: true,
+  fallback: <div>SSR fallback</div>,
+  suspense: false,
+}
+```
+
+### Debug Mode
+
+```tsx
+// Enable debug mode for detailed logging
+const LazyComponent = retryDynamicImport(() => import('./MyComponent'), {
+  log: {
+    enabled: true,
+    level: 'debug',
+    telemetryHook: (event) => {
+      console.log('Loader Event:', event);
+    },
+  },
+});
+```
+
+---
+
+## 📄 License
+
+MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+### Development Setup
+
+```bash
+git clone https://github.com/mmdbay/react-lazy-loader-js.git
+cd react-lazy-loader-js
+npm install
+npm run dev
+```
+
+### Running Tests
+
+```bash
+npm test
+npm run test:coverage
+```
+
+### Building
+
+```bash
+npm run build
+```
+
+---
+
+## 📚 Additional Resources
+
+- [React Dynamic Import Documentation](https://reactjs.org/docs/code-splitting.html)
+- [Webpack Dynamic Import](https://webpack.js.org/guides/code-splitting/)
+- [React Suspense](https://reactjs.org/docs/react-api.html#reactsuspense)
+- [Error Boundaries](https://reactjs.org/docs/error-boundaries.html)
+
+---
+
+## 🆘 Support
+
+If you need help or have questions:
+
+- 📖 [Documentation](https://github.com/mmdbay/react-lazy-loader-js#readme)
+- 🐛 [Issues](https://github.com/mmdbay/react-lazy-loader-js/issues)
+- 💬 [Discussions](https://github.com/mmdbay/react-lazy-loader-js/discussions)
+- 📧 [Email Support](mailto:muhammadhasanbeygi@gmail.com)
+
+---
+
+## ⭐ Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=mmdbay/react-lazy-loader-js&type=Date)](https://star-history.com/#mmdbay/react-lazy-loader-js&Date)
