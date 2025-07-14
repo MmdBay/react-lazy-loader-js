@@ -1,138 +1,312 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { getNetworkInfo } from './networkSpeed'; // This function grabs network info like speed and type
+import React, { useState, useEffect, useCallback, ReactNode } from 'react';
+import { getNetworkInfo } from './networkSpeed';
 
-// Here we're setting up the props for our Loader component, giving users options to tweak it
+type LoaderAnimation = 'spinner' | 'dots' | 'wave' | 'bar';
+
 interface LoaderProps {
-  size?: number; // Size of the spinner (default is 50px if not provided)
-  borderSize?: number; // Thickness of the spinner's border
-  color?: string; // Color of the spinner (black by default)
-  speed?: number; // How fast the spinner rotates (in seconds per full spin)
-  retries?: number; // How many retry attempts have been made (we default to 0)
-  showRetries?: boolean; // Whether to show the retry count or not
-  showNetworkInfo?: boolean; // Whether to show network speed/type
-  customStyle?: React.CSSProperties; // Extra custom styles for the loader container (if someone wants to customize it further)
+  size?: number;
+  borderSize?: number;
+  color?: string;
+  gradient?: string[]; // For multi-color/gradient
+  speed?: number;
+  retries?: number;
+  showRetries?: boolean;
+  showNetworkInfo?: boolean;
+  customStyle?: React.CSSProperties;
+  shadow?: string;
+  glow?: boolean;
+  animationType?: LoaderAnimation;
+  icon?: ReactNode;
+  progress?: number; // 0-100, if you want to show progress
+  message?: string;
+  darkMode?: boolean;
+  children?: ReactNode;
 }
 
-/**
- * This is the `Loader` component that shows a spinner while something is loading. 
- * It can also optionally show retry attempts and network info, depending on the props passed in.
- */
 const Loader: React.FC<LoaderProps> = ({
-  size = 50, // If no size is provided, we default to 50px
-  borderSize = 4, // Border thickness defaults to 4px
-  color = '#000', // Default color is black
-  speed = 1, // It rotates once every 1 second by default
-  retries = 0, // Starts with 0 retries
-  showRetries = true, // We show retries by default
-  showNetworkInfo = true, // We also show network info by default
-  customStyle = {}, // No custom styles by default
+  size = 60,
+  borderSize = 6,
+  color = '#4f8cff',
+  gradient,
+  speed = 1.2,
+  retries = 0,
+  showRetries = true,
+  showNetworkInfo = true,
+  customStyle = {},
+  shadow = '0 0 24px 0 #4f8cff55',
+  glow = true,
+  animationType = 'spinner',
+  icon,
+  progress,
+  message,
+  darkMode = false,
+  children,
 }) => {
-  // This state holds the network info like speed, type, and whether data saver is on
   const [networkInfo, setNetworkInfo] = useState<{ downlink: number | null; effectiveType: string; saveData: boolean }>({
-    downlink: null, // Start with no info on download speed
-    effectiveType: 'unknown', // Start with an unknown connection type
-    saveData: false, // Assume data saver is off to start
+    downlink: null,
+    effectiveType: 'unknown',
+    saveData: false,
   });
 
-  /**
-   * This function `updateNetworkInfo` grabs the network info and updates our state if it changes.
-   * We use `useCallback` here to make sure the function doesn’t get recreated on every render — 
-   * it's only made once.
-   */
   const updateNetworkInfo = useCallback(() => {
-    const info = getNetworkInfo(); // Grab the current network info
+    const info = getNetworkInfo();
     setNetworkInfo((prevInfo) => {
-      // Only update the state if the network info has changed
       if (
         info.downlink !== prevInfo.downlink ||
         info.effectiveType !== prevInfo.effectiveType ||
         info.saveData !== prevInfo.saveData
       ) {
-        return info; // If something has changed, update it
+        return info;
       }
-      return prevInfo; // Otherwise, just keep the previous state
+      return prevInfo;
     });
   }, []);
 
-  /**
-   * This effect runs once when the component mounts. It fetches the initial network info 
-   * and listens for changes in the network connection (like switching from Wi-Fi to 4G).
-   */
   useEffect(() => {
-    updateNetworkInfo(); // Get the initial network info when the component loads
-
-    // Check if the browser supports the Network Information API
+    updateNetworkInfo();
     const connection = navigator.connection;
     if (connection && connection.addEventListener) {
-      // If it does, listen for changes in the network status
       connection.addEventListener('change', updateNetworkInfo);
     }
-
-    // Cleanup function: remove the listener when the component unmounts
     return () => {
       if (connection && connection.removeEventListener) {
         connection.removeEventListener('change', updateNetworkInfo);
       }
     };
-  }, [updateNetworkInfo]); // `updateNetworkInfo` is a dependency, so the effect only runs when it changes
+  }, [updateNetworkInfo]);
 
-  return (
-    <div style={{ ...styles.loaderContainer, ...customStyle }}> {/* Combine custom styles with our default styles */}
-      {/* The spinner itself */}
+  // Inject keyframes for all animations if not already present
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !document.getElementById('loader-keyframes')) {
+      const style = document.createElement('style');
+      style.id = 'loader-keyframes';
+      style.innerHTML = `
+        @keyframes spin { 0% { transform: rotate(0deg);} 100% { transform: rotate(360deg);} }
+        @keyframes pulse { 0% { opacity: 0.7; transform: scale(1);} 50% { opacity: 0.2; transform: scale(1.15);} 100% { opacity: 0.7; transform: scale(1);} }
+        @keyframes dot-bounce { 0%, 80%, 100% { transform: scale(0);} 40% { transform: scale(1);} }
+        @keyframes wave { 0%, 40%, 100% { transform: scaleY(0.4);} 20% { transform: scaleY(1.0);} }
+        @keyframes bar { 0% { left: -40%; } 100% { left: 100%; } }
+      `;
+      document.head.appendChild(style);
+    }
+  }, []);
+
+  // Gradient or single color
+  const spinnerBorder = gradient
+    ? `conic-gradient(${gradient.join(', ')})`
+    : undefined;
+
+  // Loader variants
+  const renderSpinner = () => (
+    <div
+      style={{
+        width: size,
+        height: size,
+        border: `${borderSize}px solid #e0e7ff`,
+        borderTop: `${borderSize}px solid ${color}`,
+        borderRadius: '50%',
+        boxShadow: shadow,
+        animation: `spin ${speed}s cubic-bezier(.68,-0.55,.27,1.55) infinite`,
+        position: 'relative',
+        background: spinnerBorder,
+        ...(glow
+          ? { filter: `drop-shadow(0 0 12px ${color}99)` }
+          : {}),
+      }}
+    >
+      {/* Progress circle (if progress is defined) */}
+      {typeof progress === 'number' && (
+        <svg
+          width={size}
+          height={size}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            transform: 'rotate(-90deg)',
+            pointerEvents: 'none',
+          }}
+        >
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={(size - borderSize) / 2.2}
+            fill="none"
+            stroke={color}
+            strokeWidth={borderSize}
+            strokeDasharray={2 * Math.PI * ((size - borderSize) / 2.2)}
+            strokeDashoffset={
+              2 * Math.PI * ((size - borderSize) / 2.2) * (1 - (progress / 100))
+            }
+            style={{ transition: 'stroke-dashoffset 0.4s' }}
+          />
+        </svg>
+      )}
+    </div>
+  );
+
+  const renderDots = () => (
+    <div style={{ display: 'flex', gap: size * 0.12 }}>
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          style={{
+            width: size * 0.22,
+            height: size * 0.22,
+            borderRadius: '50%',
+            background: gradient
+              ? `linear-gradient(135deg, ${gradient.join(', ')})`
+              : color,
+            animation: `dot-bounce 1.4s infinite both`,
+            animationDelay: `${i * 0.16}s`,
+            boxShadow: glow ? `0 0 8px ${color}99` : undefined,
+          }}
+        />
+      ))}
+    </div>
+  );
+
+  const renderWave = () => (
+    <div style={{ display: 'flex', alignItems: 'end', gap: size * 0.08, height: size * 0.5 }}>
+      {[0, 1, 2, 3, 4].map((i) => (
+        <div
+          key={i}
+          style={{
+            width: size * 0.12,
+            height: size * 0.5,
+            background: gradient
+              ? `linear-gradient(135deg, ${gradient.join(', ')})`
+              : color,
+            borderRadius: 6,
+            animation: `wave 1.2s infinite ease-in-out`,
+            animationDelay: `${i * 0.1}s`,
+            boxShadow: glow ? `0 0 8px ${color}99` : undefined,
+          }}
+        />
+      ))}
+    </div>
+  );
+
+  const renderBar = () => (
+    <div
+      style={{
+        width: size * 1.2,
+        height: borderSize * 2.2,
+        background: '#e0e7ff',
+        borderRadius: borderSize,
+        overflow: 'hidden',
+        position: 'relative',
+      }}
+    >
       <div
         style={{
-          ...styles.loader,
-          borderWidth: borderSize, // Spinner border thickness
-          borderColor: `${color} transparent transparent transparent`, // Spinner color
-          width: size, // Set the size of the spinner (width and height)
-          height: size,
-          animation: `spin ${speed}s linear infinite`, // How fast it spins (based on `speed` prop)
+          position: 'absolute',
+          height: '100%',
+          width: '40%',
+          background: gradient
+            ? `linear-gradient(90deg, ${gradient.join(', ')})`
+            : color,
+          borderRadius: borderSize,
+          animation: 'bar 1.2s infinite linear',
+          boxShadow: glow ? `0 0 8px ${color}99` : undefined,
         }}
-      ></div>
-      
-      {/* If showRetries is true, display the retry count */}
-      {showRetries && <div style={styles.retryText}>Retries: {retries}</div>}
-      
-      {/* If showNetworkInfo is true, show network speed, connection type, and data saver status */}
+      />
+    </div>
+  );
+
+  const renderIcon = () =>
+    icon && (
+      <div style={{ marginBottom: 12, fontSize: size * 0.7 }}>{icon}</div>
+    );
+
+  // Theme
+  const themeStyles = darkMode
+    ? {
+        background: 'linear-gradient(135deg, #23272f 0%, #2d3748 100%)',
+        color: '#e0e7ff',
+      }
+    : {};
+
+  return (
+    <div
+      style={{
+        ...styles.loaderContainer,
+        ...themeStyles,
+        ...customStyle,
+      }}
+    >
+      {renderIcon()}
+      {animationType === 'spinner' && renderSpinner()}
+      {animationType === 'dots' && renderDots()}
+      {animationType === 'wave' && renderWave()}
+      {animationType === 'bar' && renderBar()}
+      {typeof progress === 'number' && (
+        <div style={styles.progressText}>{progress}%</div>
+      )}
+      {showRetries && <div style={styles.retryText}>تلاش مجدد: {retries}</div>}
       {showNetworkInfo && (
         <div style={styles.networkInfo}>
-          <div>Speed: {networkInfo.downlink !== null ? `${networkInfo.downlink} Mbps` : 'Loading...'}</div>
-          <div>Connection Type: {networkInfo.effectiveType}</div>
-          <div>Data Saver: {networkInfo.saveData ? 'Enabled' : 'Disabled'}</div>
+          <div>
+            سرعت:{' '}
+            {networkInfo.downlink !== null
+              ? `${networkInfo.downlink} Mbps`
+              : 'در حال دریافت...'}
+          </div>
+          <div>نوع اتصال: {networkInfo.effectiveType}</div>
+          <div>صرفه‌جویی دیتا: {networkInfo.saveData ? 'فعال' : 'غیرفعال'}</div>
         </div>
       )}
+      {message && <div style={styles.message}>{message}</div>}
+      {children}
     </div>
   );
 };
 
-// These are the default styles for our loader
-const styles: { [key: string]: React.CSSProperties } = {
+const styles: { [key: string]: any } = {
   loaderContainer: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    height: '100vh',
-    width: '100vw',
+    minHeight: '100vh',
+    minWidth: '100vw',
     position: 'absolute',
     top: 0,
     left: 0,
-  },
-  loader: {
-    borderRadius: '50%',
-    borderStyle: 'solid',
-    boxSizing: 'border-box',
+    zIndex: 9999,
+    transition: 'background 0.3s',
   },
   retryText: {
-    marginTop: 10,
-    fontSize: '16px',
-    color: '#000',
+    marginTop: 18,
+    fontSize: '18px',
+    color: '#4f8cff',
+    fontWeight: 600,
+    letterSpacing: 1,
+    textShadow: '0 1px 8px #b6ccff',
   },
   networkInfo: {
-    marginTop: 5,
-    fontSize: '14px',
+    marginTop: 8,
+    fontSize: '15px',
     color: '#555',
     textAlign: 'center',
+    background: '#f3f6ffcc',
+    borderRadius: 8,
+    padding: '8px 16px',
+    boxShadow: '0 2px 8px #e0e7ff',
+  },
+  progressText: {
+    marginTop: 10,
+    fontSize: '16px',
+    color: '#4f8cff',
+    fontWeight: 700,
+    letterSpacing: 1,
+  },
+  message: {
+    marginTop: 14,
+    fontSize: '16px',
+    color: '#333',
+    textAlign: 'center',
+    fontWeight: 500,
   },
 };
 
