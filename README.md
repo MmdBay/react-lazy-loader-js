@@ -8,22 +8,18 @@
 ---
 
 ## 🚀 Features
-
-- **Dynamic Retry Logic**: Smart, customizable retry strategies (exponential, linear, custom) for failed imports.
-- **Advanced Caching**: LFU, LRU, memory, localStorage, IndexedDB, or custom cache support.
-- **Circuit Breaker**: Prevents excessive retries and protects your app from repeated failures.
-- **Prefetching & Priority Loading**: Prefetch on hover, idle, visible, or immediately; batch and prioritize loads.
-- **Context & Global Config**: Set global defaults for all loaders using React context.
-- **SSR/SSG & Suspense-less**: Works seamlessly with server-side rendering and can operate without React.Suspense.
-- **Theme & Animation Registry**: Register and use custom themes and loader animations globally.
-- **Multi-Stage Loading**: Skeleton → spinner → content, with full control over each stage.
-- **Error Boundaries & Recovery**: Custom error fallback, retry, and progressive enhancement/fallback strategies.
-- **Accessibility (A11y)**: ARIA roles, labels, and screen reader support out of the box.
-- **Telemetry & Logging**: Hook into loader events for analytics, monitoring, or debugging.
-- **Remote/CDN Import**: Support for loading modules from remote or CDN sources.
-- **Test/Mock API**: Easily mock dynamic imports for testing environments.
-- **Batching & Concurrency**: Control the number of concurrent loads and queue the rest.
-- **Progressive Enhancement**: Fallback to static or simpler components if dynamic import fails or is unsupported.
+- **Dynamic Retry Logic**: Smart, customizable retry strategies (exponential, linear, custom) with jitter and exponential back-off.
+- **Circuit Breaker**: Prevents excessive retries and automatically recovers once the service stabilises.
+- **Advanced Caching**: LFU, LRU, in-memory, `localStorage`, `IndexedDB` or a fully custom cache.
+- **SSR/SSG & Suspense-less**: First-class support for server-side rendering and environments where `React.Suspense` isn’t available.
+- **Prefetching & Priority Loading**: Prefetch on hover/visible/idle and control load priority or batching.
+- **Batching & Concurrency Control**: Limit concurrent imports and process the rest in batches.
+- **Progressive Enhancement & Error Recovery**: Static fallbacks, multi-stage loaders and custom error boundaries.
+- **Theme & Animation Registry**: Register global themes/animations or inject your own loader component.
+- **Accessibility (A11y)**: ARIA roles, live regions and full screen-reader support.
+- **Telemetry & Logging**: Emit granular events you can pipe into any analytics/monitoring tool.
+- **Remote/CDN Import**: Seamlessly pull components from remote bundles or CDNs.
+- **Test/Mock API**: Swap real imports with mocks in your test suite with one flag.
 
 ---
 
@@ -43,7 +39,7 @@ yarn add react-lazy-loader-js
 
 ## 🚀 Quick Start
 
-### Basic Usage
+### 1. Basic Retry Loader
 
 ```tsx
 import React from 'react';
@@ -61,7 +57,80 @@ function App() {
 }
 ```
 
-### Advanced Usage with LazyLoader Component
+### 2. Suspense-less Loading (No React.Suspense)
+
+```tsx
+import { LazyLoader } from 'react-lazy-loader-js';
+
+function App() {
+  return (
+    <LazyLoader
+      importFunction={() => import('./MyComponent')}
+      options={{ 
+        suspense: false,
+        loader: { message: 'Loading component...' }
+      }}
+    />
+  );
+}
+```
+
+### 3. Server-Side Rendering (Next.js – App Router)
+
+```tsx
+"use client";
+import { LazyLoader } from 'react-lazy-loader-js';
+
+export default function Page() {
+  return (
+    <LazyLoader
+      importFunction={() => import('../components/pages/auth/login/index')}
+      options={{
+        suspense: false,
+        retry: { maxRetryCount: 3, strategy: 'exponential', initialRetryDelayMs: 800 },
+        loader: { theme: 'dark', animationType: 'pulse', message: 'Loading...', size: 48 },
+        cache: { enabled: true, type: 'lfu', maxAge: 60 * 60 * 1000 },
+      }}
+    />
+  );
+}
+```
+
+### 4. Prefetch On Hover
+
+```tsx
+import { prefetchDynamicImport } from 'react-lazy-loader-js';
+import { useRef } from 'react';
+
+const ref = useRef<HTMLButtonElement>(null);
+
+prefetchDynamicImport(() => import('./HeavyChart'), {
+  strategy: 'on-hover',
+  elementRef: ref,
+});
+```
+
+### 5. Circuit Breaker Example
+
+```tsx
+import { LazyLoader } from 'react-lazy-loader-js';
+
+function ReportsWidget() {
+  return (
+    <LazyLoader
+      importFunction={() => import('./Reports')}
+      options={{
+        suspense: false,
+        circuitBreaker: { enabled: true, threshold: 3, resetTime: 30000 },
+        retry: { maxRetryCount: 3 },
+        loader: { message: 'Loading reports...' }
+      }}
+    />
+  );
+}
+```
+
+### 6. LazyLoader Component (Full control)
 
 ```tsx
 import React from 'react';
@@ -72,6 +141,7 @@ function App() {
     <LazyLoader
       importFunction={() => import('./MyComponent')}
       options={{
+        suspense: false,
         retry: {
           maxRetryCount: 3,
           strategy: 'linear',
@@ -79,9 +149,9 @@ function App() {
         },
         loader: {
           theme: 'dark',
-          animation: 'spin',
-          size: 48, // pixels
-          loadingMessage: 'Loading user profile...',
+          animationType: 'spin',
+          size: 48,
+          message: 'Loading user profile...',
           errorFallback: (error, retry) => (
             <div>
               <p>Failed to load: {error.message}</p>
@@ -90,7 +160,8 @@ function App() {
           ),
         },
         cache: {
-          type: 'memory',
+          enabled: true,
+          type: 'lfu',
           maxSize: 50,
         },
       }}
@@ -135,9 +206,9 @@ const LazyComponent = retryDynamicImport(
     },
     loader: {
       theme: 'light',
-      animation: 'wave',
+      animationType: 'wave',
       size: 64,
-      loadingMessage: 'Loading component...',
+      message: 'Loading component...',
     },
   }
 );
@@ -162,6 +233,7 @@ function App() {
     <LazyLoader
       importFunction={() => import('./MyComponent')}
       options={{
+        suspense: false,
         retry: {
           maxRetryCount: 3,
           strategy: 'linear',
@@ -169,9 +241,9 @@ function App() {
         },
         loader: {
           theme: 'dark',
-          animation: 'spin',
+          animationType: 'spin',
           size: 48,
-          loadingMessage: 'Loading user profile...',
+          message: 'Loading user profile...',
           errorFallback: (error, retry) => (
             <div>
               <p>Failed to load: {error.message}</p>
@@ -180,7 +252,8 @@ function App() {
           ),
         },
         cache: {
-          type: 'memory',
+          enabled: true,
+          type: 'lfu',
           maxSize: 50,
         },
       }}
@@ -211,15 +284,14 @@ retry: {
 ```tsx
 loader: {
   theme: 'light',                // 'light', 'dark', 'custom'
-  animation: 'spin',             // 'spin', 'pulse', 'wave', 'bounce', 'custom'
+  animationType: 'spin',         // 'spin', 'pulse', 'wave', 'bounce', etc.
   size: 48,                      // Loader diameter in px
-  loadingMessage: 'Loading...',
-  className: 'custom-loader',    // Custom CSS class
-  style: { color: 'blue' },      // Custom inline styles
+  message: 'Loading...',
+  customStyle: { color: 'blue' }, // Custom inline styles
   glow: true,                    // Enable glow effect
-  pulse: true,                   // Enable pulse effect
-  gradient: true,                // Enable gradient effect
-  customAnimation: MyAnimation,  // Custom animation component
+  pulseEffect: true,             // Enable pulse effect
+  gradient: ['#ff0099', '#00ff99'], // Gradient colors array
+  // Note: customAnimation requires animation registry
 }
 ```
 
@@ -227,14 +299,11 @@ loader: {
 
 ```tsx
 cache: {
-  type: 'lfu',                   // 'lfu', 'lru', 'memory', 'localStorage', 'indexedDB', 'custom'
+  enabled: true,                 // Enable caching
+  type: 'lfu',                   // 'lfu', 'lru', 'memory'
   maxSize: 100,                  // Maximum number of cached items
   maxAge: 3600000,               // Maximum age in milliseconds
-  keyGenerator: (importFn) => '', // Custom cache key generator
-  storage: customStorage,        // Custom storage implementation
-  onHit: (key) => {},            // Callback on cache hit
-  onMiss: (key) => {},           // Callback on cache miss
-  onEvict: (key, value) => {},   // Callback on cache eviction
+  customCache: customCacheImpl,  // Custom cache implementation
 }
 ```
 
@@ -304,7 +373,7 @@ const globalConfig = {
   },
   loader: {
     theme: 'dark',
-    animation: 'wave',
+    animationType: 'wave',
     size: 48,
   },
   cache: {
@@ -435,7 +504,9 @@ priorityLoadComponent(() => import('./Component'), {
 <LazyLoader
   importFunction={() => import('./MyComponent')}
   options={{
+    suspense: false,
     loader: {
+      message: 'Loading component...',
       multiStage: {
         skeleton: <div className="skeleton-loader" />,
         delay: 500, // Show skeleton for 500ms before spinner
@@ -452,13 +523,15 @@ priorityLoadComponent(() => import('./Component'), {
 <LazyLoader
   importFunction={() => import('./MyComponent')}
   options={{
+    suspense: false,
     circuitBreaker: {
       enabled: true,
-      failureThreshold: 5,
-      recoveryTimeout: 30000,
+      threshold: 5,
+      resetTime: 30000,
       onOpen: () => console.log('Circuit breaker opened'),
       onClose: () => console.log('Circuit breaker closed'),
     },
+    loader: { message: 'Loading with circuit breaker...' }
   }}
 />
 ```
@@ -469,12 +542,14 @@ priorityLoadComponent(() => import('./Component'), {
 <LazyLoader
   importFunction={() => import('./MyComponent')}
   options={{
+    suspense: false,
     batching: {
       enabled: true,
       maxConcurrent: 3,
       batchSize: 5,
       delay: 100,
     },
+    loader: { message: 'Loading in batch...' }
   }}
 />
 ```
@@ -485,11 +560,13 @@ priorityLoadComponent(() => import('./Component'), {
 <LazyLoader
   importFunction={() => import('./MyComponent')}
   options={{
+    suspense: false,
     importFrom: {
       type: 'cdn',
       baseUrl: 'https://cdn.example.com',
       fallback: 'local',
     },
+    loader: { message: 'Loading from CDN...' }
   }}
 />
 ```
@@ -500,6 +577,7 @@ priorityLoadComponent(() => import('./Component'), {
 <LazyLoader
   importFunction={() => import('./MyComponent')}
   options={{
+    suspense: false,
     mock: {
       enabled: process.env.NODE_ENV === 'test',
       mockImport: async () => ({
@@ -507,6 +585,7 @@ priorityLoadComponent(() => import('./Component'), {
       }),
       delay: 100, // Simulate loading delay
     },
+    loader: { message: 'Loading test component...' }
   }}
 />
 ```
@@ -590,11 +669,13 @@ function App() {
 <LazyLoader
   importFunction={() => import('./MyComponent')}
   options={{
+    suspense: false,
     progressive: {
       enabled: true,
       fallback: <StaticComponent />,
       strategy: 'graceful-degradation',
     },
+    loader: { message: 'Loading enhanced component...' }
   }}
 />
 ```
@@ -607,11 +688,13 @@ function App() {
 <LazyLoader
   importFunction={() => import('./MyComponent')}
   options={{
+    suspense: false,
     memory: {
       cleanup: true,
       maxAge: 300000, // 5 minutes
       onCleanup: (key) => console.log('Cleaned up:', key),
     },
+    loader: { message: 'Loading with memory management...' }
   }}
 />
 ```
@@ -622,12 +705,14 @@ function App() {
 <LazyLoader
   importFunction={() => import('./MyComponent')}
   options={{
+    suspense: false,
     network: {
       adaptive: true,
       speedThreshold: 1000, // 1Mbps
       compression: true,
       preload: 'metadata',
     },
+    loader: { message: 'Loading with network optimization...' }
   }}
 />
 ```
@@ -651,7 +736,7 @@ const customTheme = {
   styles: {
     container: 'custom-loader-container',
     spinner: 'custom-loader-spinner',
-    loadingMessage: 'custom-loader-text',
+    message: 'custom-loader-text',
   },
 };
 
@@ -717,15 +802,13 @@ const completeOptions = {
   // Loader configuration
   loader: {
     theme: 'light',
-    animation: 'spin',
+    animationType: 'spin',
     size: 48,
-    loadingMessage: 'Loading...',
-    className: '',
-    style: {},
+    message: 'Loading...',
+    customStyle: {},
     glow: true,
-    pulse: true,
-    gradient: true,
-    customAnimation: null,
+    pulseEffect: true,
+    gradient: ['#6366f1', '#8b5cf6'],
     multiStage: {
       skeleton: null,
       delay: 0,
@@ -735,14 +818,11 @@ const completeOptions = {
 
   // Cache configuration
   cache: {
+    enabled: true,
     type: 'lfu',
     maxSize: 100,
     maxAge: 3600000,
-    keyGenerator: null,
-    storage: null,
-    onHit: null,
-    onMiss: null,
-    onEvict: null,
+    customCache: null,
   },
 
   // Error handling
@@ -777,8 +857,8 @@ const completeOptions = {
   // Circuit breaker
   circuitBreaker: {
     enabled: false,
-    failureThreshold: 5,
-    recoveryTimeout: 30000,
+    threshold: 5,
+    resetTime: 30000,
     onOpen: null,
     onClose: null,
   },
@@ -874,8 +954,10 @@ test('handles retry on error', async () => {
     <LazyLoader
       importFunction={mockImport}
       options={{
+        suspense: false,
         retry: { maxRetryCount: 2 },
         loader: {
+          message: 'Loading...',
           errorFallback: (error, retry) => (
             <button onClick={retry}>Retry</button>
           ),
@@ -899,13 +981,13 @@ test('handles retry on error', async () => {
 
 ```tsx
 // For frequently accessed components
-cache: { type: 'lfu', maxSize: 50 }
+cache: { enabled: true, type: 'lfu', maxSize: 50 }
 
 // For large components with limited memory
-cache: { type: 'lru', maxSize: 20 }
+cache: { enabled: true, type: 'lfu', maxSize: 20 }
 
-// For persistent caching
-cache: { type: 'localStorage', maxAge: 86400000 }
+// For persistent caching with TTL
+cache: { enabled: true, type: 'lfu', maxSize: 100, maxAge: 86400000 }
 ```
 
 ### 2. Implement Smart Prefetching
@@ -927,8 +1009,8 @@ prefetchDynamicImport(() => import('./UserProfile'), {
 ```tsx
 circuitBreaker: {
   enabled: true,
-  failureThreshold: 3,
-  recoveryTimeout: 60000,
+  threshold: 3,
+  resetTime: 60000,
 }
 ```
 
@@ -1100,7 +1182,7 @@ export default function Page() {
           loader: {
             theme: "dark",
             animation: "pulse",
-            loadingMessage: "در حال بارگذاری...", // Farsi message example
+            message: "Loading...",
             size: 48,
           },
           cache: {
@@ -1113,4 +1195,377 @@ export default function Page() {
     </div>
   );
 }
+```
+
+## 💅 Advanced Loading Spinner
+
+Our package includes an extremely beautiful, highly customizable loading spinner component with modern animations, visual effects, and professional themes. Built with cutting-edge design principles for maximum user experience.
+
+### 🎨 Basic Usage
+
+```jsx
+import { Loader } from 'react-lazy-loader-js';
+
+function LoadingPage() {
+  return (
+    <Loader
+      size={100}
+      color="#6366f1"
+      animationType="gradient-spin"
+      message="Loading your amazing content..."
+      showNetworkInfo={true}
+    />
+  );
+}
+```
+
+### 🚀 Advanced Examples
+
+#### Professional Glassmorphism Theme
+```jsx
+<Loader
+  size={120}
+  animationType="particles"
+  customTheme="glass"
+  glassmorphism={true}
+  vibrantColors={true}
+  gradient={["#ff0099", "#00ff99", "#9900ff", "#ff9900", "#0099ff"]}
+  message="Loading with style..."
+  glow={true}
+  glowIntensity={0.8}
+  microInteractions={true}
+  floatingStyle={true}
+  particleCount={8}
+  showNetworkInfo={true}
+/>
+```
+
+#### Modern Gradient Theme
+```jsx
+<Loader
+  size={80}
+  animationType="orbit"
+  customTheme="gradient"
+  colorShift={true}
+  breathingEffect={true}
+  magneticEffect={true}
+  scaleEffect={true}
+  smoothTransitions={true}
+  message="Almost there..."
+  showPercentage={true}
+  progress={75}
+/>
+```
+
+#### Neon Cyberpunk Style
+```jsx
+<Loader
+  size={90}
+  animationType="neon"
+  customTheme="neon"
+  glow={true}
+  glowIntensity={1.0}
+  hoverEffects={true}
+  pulseEffect={true}
+  message="Entering the matrix..."
+  darkMode={true}
+/>
+```
+
+#### Minimal Clean Design
+```jsx
+<Loader
+  size={60}
+  animationType="spiral"
+  customTheme="minimal"
+  reducedMotion={false}
+  accessibility={true}
+  message="Simple and elegant"
+  showRetries={true}
+  retries={2}
+/>
+```
+
+#### Neumorphism Effect
+```jsx
+<Loader
+  size={100}
+  animationType="elastic"
+  neumorphism={true}
+  customTheme="modern"
+  rounded={true}
+  autoHideDelay={5000}
+  fadeInDuration={1000}
+  message="Soft and modern design"
+/>
+```
+
+### 🎭 Available Animation Types
+
+#### Classic Animations
+- `spin` - Classic rotating spinner with smooth easing
+- `dots` - Bouncing dots with physics-based animation
+- `wave` - Audio equalizer-style wave animation
+- `pulse` - Breathing circle with scale animation
+
+#### Modern Animations
+- `gradient-spin` - **NEW!** Color-shifting gradient spinner
+- `particles` - **NEW!** Floating particle effects
+- `spiral` - **NEW!** Elegant spiral rotation
+- `orbit` - **NEW!** Planetary orbit animation
+
+#### Advanced Animations
+- `bounce` - **NEW!** Physics-based bouncing effect
+- `morph` - **NEW!** Shape-morphing animation
+- `elastic` - **NEW!** Elastic scale and rotation
+- `flip` - **NEW!** 3D flip animation
+- `scale` - **NEW!** Dynamic scaling effect
+- `neon` - **NEW!** Glowing neon style
+
+### 🎨 Professional Themes
+
+#### `modern` (Default)
+Clean, contemporary design with subtle shadows and smooth transitions.
+```jsx
+<Loader customTheme="modern" />
+```
+
+#### `glass`
+Glassmorphism effect with blur, transparency, and modern aesthetics.
+```jsx
+<Loader customTheme="glass" glassmorphism={true} />
+```
+
+#### `neon`
+Cyberpunk-inspired neon colors with glowing effects.
+```jsx
+<Loader customTheme="neon" />
+```
+
+#### `minimal`
+Ultra-clean minimalist design with no unnecessary elements.
+```jsx
+<Loader customTheme="minimal" />
+```
+
+#### `gradient`
+Beautiful gradient backgrounds with vibrant colors.
+```jsx
+<Loader customTheme="gradient" />
+```
+
+#### `classic`
+Timeless elegant design with traditional styling.
+```jsx
+<Loader customTheme="classic" />
+```
+
+### ✨ Advanced Visual Effects
+
+#### Glassmorphism
+```jsx
+<Loader
+  glassmorphism={true}
+  blurBackground={true}
+  customTheme="glass"
+/>
+```
+
+#### Neumorphism
+```jsx
+<Loader
+  neumorphism={true}
+  customTheme="modern"
+  darkMode={false}
+/>
+```
+
+#### Magnetic Cursor Effect
+```jsx
+<Loader
+  magneticEffect={true}
+  hoverEffects={true}
+  microInteractions={true}
+/>
+```
+
+#### Color Shifting
+```jsx
+<Loader
+  colorShift={true}
+  vibrantColors={true}
+  gradient={["#ff6b6b", "#4ecdc4", "#45b7d1", "#96ceb4", "#ffeaa7"]}
+/>
+```
+
+### 🎪 Animation Customization
+
+#### Particle Effects
+```jsx
+<Loader
+  animationType="particles"
+  particleCount={10}
+  vibrantColors={true}
+  glow={true}
+  glowIntensity={0.7}
+/>
+```
+
+#### Floating & Breathing
+```jsx
+<Loader
+  floatingStyle={true}
+  breathingEffect={true}
+  scaleEffect={true}
+  smoothTransitions={true}
+/>
+```
+
+#### Micro-interactions
+```jsx
+<Loader
+  microInteractions={true}
+  hoverEffects={true}
+  smoothTransitions={true}
+  accessibility={true}
+/>
+```
+
+### 🌟 Complete Feature Set
+
+#### Visual Customization
+- **Size**: From 40px to 200px+
+- **Colors**: Primary, secondary, accent colors
+- **Gradients**: Multi-color gradients with vibrant options
+- **Glow Effects**: Adjustable intensity glow
+- **Shadows**: Professional drop shadows
+- **Rounded Corners**: Modern border radius
+- **Transparency**: Backdrop and glassmorphism effects
+
+#### Animation Features
+- **20+ Animations**: From classic to cutting-edge
+- **Speed Control**: Adjustable animation timing
+- **Easing Functions**: Smooth cubic-bezier transitions
+- **Particle Systems**: Configurable particle count
+- **3D Effects**: Perspective and depth
+- **Color Shifts**: Dynamic color transitions
+
+#### User Experience
+- **Accessibility**: Full ARIA support and screen reader compatibility
+- **Reduced Motion**: Respects user preferences
+- **Auto-hide**: Programmable disappearing
+- **Fade Transitions**: Smooth entrance/exit
+- **Progress Tracking**: Real-time progress display
+- **Network Info**: Connection speed and data saver status
+
+#### Professional Polish
+- **6 Themes**: From minimal to cyberpunk
+- **Glassmorphism**: Modern blur effects
+- **Neumorphism**: Soft UI design
+- **Magnetic Effects**: Interactive cursor following
+- **Loading Phases**: Multi-stage loading states
+- **Error Handling**: Graceful error recovery
+
+### 📱 Responsive & Accessible
+
+```jsx
+<Loader
+  // Accessibility features
+  accessibility={true}
+  reducedMotion={false}
+  highContrast={false}
+  
+  // Responsive design
+  size={window.innerWidth < 768 ? 60 : 100}
+  customStyle={{
+    '@media (max-width: 768px)': {
+      padding: '20px'
+    }
+  }}
+  
+  // Professional typography
+  font="'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+/>
+```
+
+### 🔧 All Available Props
+
+```jsx
+<Loader
+  // Basic properties
+  size={80}
+  borderSize={6}
+  color="#6366f1"
+  secondaryColor="#e0e7ff"
+  accentColor="#8b5cf6"
+  gradient={["#ff0099", "#00ff99"]}
+  speed={1.2}
+  
+  // Animation & Theme
+  animationType="gradient-spin"
+  customTheme="modern"
+  darkMode={false}
+  
+  // Visual Effects
+  glow={true}
+  glowIntensity={0.6}
+  shadow="0 0 32px 0 rgba(99, 102, 241, 0.3)"
+  rounded={true}
+  
+  // Advanced Effects
+  glassmorphism={false}
+  neumorphism={false}
+  vibrantColors={false}
+  colorShift={false}
+  breathingEffect={false}
+  magneticEffect={false}
+  scaleEffect={true}
+  
+  // Interactions
+  microInteractions={true}
+  hoverEffects={true}
+  smoothTransitions={true}
+  floatingStyle={true}
+  
+  // Content
+  message="Loading amazing content..."
+  showLoadingText={true}
+  showPercentage={true}
+  progress={50}
+  icon={<MyIcon />}
+  
+  // Info Display
+  showRetries={true}
+  retries={2}
+  showNetworkInfo={true}
+  
+  // Backdrop
+  backdrop={true}
+  backdropOpacity={0.7}
+  blurBackground={true}
+  
+  // Behavior
+  autoHideDelay={0}
+  fadeInDuration={800}
+  pulseEffect={false}
+  
+  // Accessibility
+  accessibility={true}
+  reducedMotion={false}
+  highContrast={false}
+  
+  // Particles (for particle animations)
+  particleCount={6}
+  
+  // Typography
+  font="'Inter', sans-serif"
+  
+  // Custom styling
+  customStyle={{}}
+  labels={{
+    loadingLabel: "Loading",
+    retryLabel: "Retry",
+    speedLabel: "Network Speed"
+  }}
+/>
 ```

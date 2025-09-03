@@ -6,6 +6,7 @@ import React, {
   useCallback,
   useRef,
   useEffect,
+  useMemo,
   Suspense,
   createContext,
   useContext
@@ -14,7 +15,8 @@ import { getConfig, RetryConfig } from './config';
 import { getRouteComponentUrl, getRetryImportFunction } from './utils';
 import { LFUCache } from './cache';
 import { CircuitBreaker } from './circuitBreaker';
-import Loader from './LoadingSpinner';
+import Loader, { LoaderAnimation } from './LoadingSpinner';
+import { LazyLoaderErrorBoundary } from './extras';
 
 const defaultLFUCache = new LFUCache<string, any>(5, 3600000);
 
@@ -33,6 +35,10 @@ export interface AdvancedRetryConfig extends Partial<RetryConfig> {
   onSuccess?: (module: any) => void; // Callback on success
   onError?: (error: any) => void; // Callback on error
   retryCondition?: (error: any) => boolean; // Custom retry condition
+  // ------ Aliases / Extras to match README ------
+  shouldRetry?: (error: any) => boolean; // Alias for retryCondition used in README examples
+  backoffMultiplier?: number; // Custom back-off base for exponential strategy (default 2)
+  jitter?: boolean; // Whether to add random jitter to delays
 }
 
 // --- Advanced Cache Types ---
@@ -42,8 +48,14 @@ export interface AdvancedCacheConfig {
   enabled?: boolean;
   customCache?: LFUCache<string, any> | any;
   key?: (importFn: () => Promise<any>) => string;
+  keyGenerator?: (importFn: () => Promise<any>) => string; // alias for key (docs)
   maxAge?: number;
+  maxSize?: number; // Maximum number of cached items
   type?: CacheType;
+  storage?: any;
+  onHit?: (key: string) => void;
+  onMiss?: (key: string) => void;
+  onEvict?: (key: string, value: any) => void;
 }
 
 /**
@@ -54,6 +66,9 @@ export interface AdvancedCircuitBreakerConfig {
   threshold?: number; // Failure threshold
   resetTime?: number; // Reset time in ms
   customStrategy?: (failures: number, lastError: any) => boolean; // Custom circuit breaker strategy
+  // Aliases to align with README examples
+  failureThreshold?: number;
+  recoveryTimeout?: number;
 }
 
 // --- Telemetry/Logging ---
@@ -69,6 +84,8 @@ export type TelemetryHook = (event: TelemetryEvent) => void;
  */
 export interface AdvancedLogConfig {
   enabled?: boolean; // Enable/disable logging
+  level?: 'debug' | 'info' | 'warn' | 'error';
+  events?: string[];
   logger?: (event: string, data: any) => void; // Custom logger function
   telemetryHook?: TelemetryHook;
 }
@@ -78,27 +95,97 @@ export interface MultiStageLoadingConfig {
   skeleton?: React.ReactNode;
   spinner?: React.ReactNode;
   delay?: number; // ms before showing spinner
+  transition?: string; // Transition style (placeholder for future use)
 }
 
 /**
  * Advanced loader configuration for LazyLoader.
  */
-export interface AdvancedLoaderConfig extends Omit<LoaderConfig, 'errorFallback'> {
+export interface AdvancedLoaderConfig {
+  // Basic properties
+  size?: number;
+  borderSize?: number;
+  color?: string;
+  secondaryColor?: string;
+  accentColor?: string;
+  gradient?: string[];
+  speed?: number;
+  showRetries?: boolean;
+  showNetworkInfo?: boolean;
+  disableNetworkInfo?: boolean; // For testing purposes
+  
+  // Component and fallback options
   component?: React.ReactNode; // Custom loader component
   fallback?: React.ReactNode; // Custom fallback
   errorFallback?: (error: any, retry: () => void) => React.ReactNode; // Custom error fallback
   loadingMessage?: string; // Custom loading message
-  animation?: string; // Loader animation type
+  
+  // Animation and theme
+  animation?: string; // Loader animation type (alias for animationType)
+  animationType?: LoaderAnimation; // Loader animation type
   animationKey?: LoaderAnimationKey;
   customAnimation?: LoaderAnimationComponent;
   theme?: string; // Loader theme
+  customTheme?: 'modern' | 'classic' | 'neon' | 'minimal' | 'gradient' | 'glass';
+  
+  // Visual effects
+  glow?: boolean;
+  glowIntensity?: number;
+  shadow?: string;
+  pulse?: boolean;
+  pulseEffect?: boolean;
+  glassmorphism?: boolean;
+  neumorphism?: boolean;
+  vibrantColors?: boolean;
+  smoothTransitions?: boolean;
+  microInteractions?: boolean;
+  scaleEffect?: boolean;
+  colorShift?: boolean;
+  breathingEffect?: boolean;
+  magneticEffect?: boolean;
+  hoverEffects?: boolean;
+  floatingStyle?: boolean;
+  
+  // Display options
+  showLoadingText?: boolean;
+  showPercentage?: boolean;
+  progress?: number;
+  message?: string;
+  icon?: React.ReactNode;
+  particleCount?: number;
+  
+  // Styling
+  className?: string;
+  style?: React.CSSProperties;
+  customStyle?: React.CSSProperties; // alias for style used in earlier code
+  font?: string;
+  rounded?: boolean;
+  darkMode?: boolean;
+  
+  // Backdrop and layout
+  backdrop?: boolean;
+  backdropOpacity?: number;
+  blurBackground?: boolean;
+  
+  // Accessibility
+  accessibility?: boolean;
+  reducedMotion?: boolean;
+  highContrast?: boolean;
+  a11yLabel?: string;
+  a11yRole?: string;
+  
+  // Behavior
+  autoHideDelay?: number;
+  fadeInDuration?: number;
+  
+  // Error handling
   customLoader?: React.ReactNode; // Custom loader node
   errorMessage?: string | ((error: any) => React.ReactNode); // Custom error message
   retryButtonText?: string; // Custom retry button text
   errorColor?: string; // Custom error color
   retryButtonStyle?: React.CSSProperties; // Custom retry button style
-  a11yLabel?: string;
-  a11yRole?: string;
+  
+  // Advanced features
   multiStage?: MultiStageLoadingConfig;
   progressiveFallback?: React.ReactNode; // Fallback for progressive enhancement
   fallbackStrategy?: 'static' | 'simple' | 'none' | ((error: any) => React.ReactNode);
@@ -110,6 +197,41 @@ export interface AdvancedLoaderConfig extends Omit<LoaderConfig, 'errorFallback'
 export interface AdvancedNetworkConfig {
   adjustRetry?: boolean; // Adjust retry based on network
   customNetworkInfo?: any; // Custom network info
+  // Extra optional fields for future network optimisation features referenced in the docs
+  adaptive?: boolean;
+  speedThreshold?: number;
+  compression?: boolean;
+  preload?: string | null;
+}
+
+// --- Memory management (placeholder) ---
+export interface MemoryConfig {
+  cleanup?: boolean;
+  maxAge?: number;
+  onCleanup?: (key: string) => void;
+}
+
+// --- Progressive enhancement (placeholder) ---
+export interface ProgressiveConfig {
+  enabled?: boolean;
+  fallback?: React.ReactNode;
+  strategy?: string;
+}
+
+// --- Batching & concurrency (placeholder) ---
+export interface BatchingConfig {
+  enabled?: boolean;
+  maxConcurrent?: number;
+  batchSize?: number;
+  delay?: number;
+}
+
+// --- Accessibility (placeholder) ---
+export interface AccessibilityConfig {
+  label?: string;
+  role?: string;
+  live?: string;
+  describedBy?: string | null;
 }
 
 /**
@@ -118,21 +240,29 @@ export interface AdvancedNetworkConfig {
 export interface AdvancedSSRConfig {
   enabled?: boolean; // Enable/disable SSR
   fallback?: React.ReactNode; // SSR fallback
+  suspense?: boolean; // Whether to wrap in React.Suspense on server (placeholder for docs)
+  preload?: boolean; // Whether to preload component on server (placeholder for docs)
 }
 
 // --- Remote/CDN Import Support ---
-export type ImportFrom = 'local' | 'cdn' | 'remote' | string;
+export type ImportFrom = 'local' | 'cdn' | 'remote' | string | {
+  type?: string;
+  baseUrl?: string;
+  fallback?: string;
+};
 
 // --- Mock/Test API ---
 export interface MockImportConfig {
   enabled?: boolean;
   mockImport?: () => Promise<any>;
+  delay?: number;
 }
 
 /**
  * Main options object for retryDynamicImport and LazyLoader.
  */
 export interface RetryDynamicImportOptions {
+  // Core
   retry?: AdvancedRetryConfig;
   cache?: AdvancedCacheConfig;
   circuitBreaker?: AdvancedCircuitBreakerConfig;
@@ -140,6 +270,10 @@ export interface RetryDynamicImportOptions {
   ssr?: AdvancedSSRConfig;
   log?: AdvancedLogConfig;
   network?: AdvancedNetworkConfig;
+  memory?: MemoryConfig;
+  progressive?: ProgressiveConfig;
+  batching?: BatchingConfig;
+  a11y?: AccessibilityConfig;
   priority?: number;
   prefetch?: boolean;
   preload?: boolean;
@@ -157,8 +291,9 @@ interface LoaderConfig {
   speed?: number;
   showRetries?: boolean;
   showNetworkInfo?: boolean;
+  disableNetworkInfo?: boolean;
   customStyle?: React.CSSProperties;
-  errorFallback?: React.ReactNode; // نمایش fallback در صورت خطا
+  errorFallback?: React.ReactNode;
 }
 
 interface UseRetryDynamicImportResult {
@@ -178,7 +313,7 @@ export const LazyLoaderProvider: React.FC<{
   <LazyLoaderContext.Provider value={value}>{children}</LazyLoaderContext.Provider>
 );
 
-function useMergedOptions(options?: RetryDynamicImportOptions): RetryDynamicImportOptions {
+export function useMergedOptions(options?: RetryDynamicImportOptions): RetryDynamicImportOptions {
   const contextOptions = useContext(LazyLoaderContext);
   return { ...(contextOptions || {}), ...(options || {}) };
 }
@@ -188,21 +323,48 @@ function useMergedOptions(options?: RetryDynamicImportOptions): RetryDynamicImpo
  * useRetryDynamicImport: Advanced hook for dynamic import with retry, cache, circuit breaker, and more.
  * Now supports context-aware config.
  */
-function useRetryDynamicImport(
+export function useRetryDynamicImport(
   importFunction: () => Promise<{ default: ComponentType<any> }>,
   options: RetryDynamicImportOptions = {}
 ): UseRetryDynamicImportResult {
   const mergedOptions = useMergedOptions(options);
-  const retryConfig = getConfig(mergedOptions.retry);
+  const retryConfig = getConfig(mergedOptions.retry || {});
+  // ------- Resolve README aliases -------
+  const retryOpts = mergedOptions.retry || {};
+  const effectiveRetryCondition = retryOpts.retryCondition || retryOpts.shouldRetry;
+  const backoffMultiplier = retryOpts.backoffMultiplier ?? 2;
+  const useJitter = retryOpts.jitter === true;
   const [retryCount, setRetryCount] = useState(0);
   const [error, setError] = useState<Error | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const circuitBreaker = useRef(new CircuitBreaker({
+  const cbOverrides = mergedOptions.circuitBreaker || {};
+  const circuitBreakerConfig = {
     ...retryConfig,
-    ...(mergedOptions.circuitBreaker || {}),
-  }));
-  const cache = mergedOptions.cache?.customCache || defaultLFUCache;
-  const cacheKey = mergedOptions.cache?.key ? mergedOptions.cache.key(importFunction) : getRouteComponentUrl(importFunction);
+    ...cbOverrides,
+    ...(cbOverrides.failureThreshold !== undefined ? { circuitBreakerThreshold: cbOverrides.failureThreshold } : {}),
+    ...(cbOverrides.recoveryTimeout !== undefined ? { resetTimeMs: cbOverrides.recoveryTimeout } : {}),
+    ...(cbOverrides.threshold !== undefined ? { circuitBreakerThreshold: cbOverrides.threshold } : {}),
+    ...(cbOverrides.resetTime !== undefined ? { resetTimeMs: cbOverrides.resetTime } : {})
+  };
+  const circuitBreaker = useRef(new CircuitBreaker(circuitBreakerConfig));
+  
+  // Create cache with custom options or use default
+  const cache = useMemo(() => {
+    if (mergedOptions.cache?.customCache) {
+      return mergedOptions.cache.customCache;
+    }
+    
+    const cacheOptions = mergedOptions.cache || {};
+    const maxSize = cacheOptions.maxSize || 50;
+    const maxAge = cacheOptions.maxAge || 3600000;
+    
+    return new LFUCache<string, any>(maxSize, maxAge);
+  }, [mergedOptions.cache]);
+  const cacheKey = mergedOptions.cache?.key
+    ? mergedOptions.cache.key(importFunction)
+    : mergedOptions.cache?.keyGenerator
+      ? mergedOptions.cache.keyGenerator(importFunction)
+      : getRouteComponentUrl(importFunction);
 
   const loadComponent = useCallback(async (): Promise<{ default: ComponentType<any> }> => {
     let hasTimedOut = false;
@@ -224,15 +386,20 @@ function useRetryDynamicImport(
         adjustedDelay = retryConfig.initialRetryDelayMs * 2;
       }
     }
-    if (typeof mergedOptions.retry?.customDelayFn === 'function') {
-      adjustedDelay = mergedOptions.retry.customDelayFn(retryCount, error);
+    if (typeof retryOpts.customDelayFn === 'function') {
+      adjustedDelay = retryOpts.customDelayFn(retryCount, error);
     }
-    if (typeof mergedOptions.retry?.strategy === 'function') {
-      adjustedDelay = mergedOptions.retry.strategy(retryCount, error) as number;
-    } else if (mergedOptions.retry?.strategy === 'exponential') {
-      adjustedDelay = retryConfig.initialRetryDelayMs * Math.pow(2, retryCount);
-    } else if (mergedOptions.retry?.strategy === 'linear') {
+    if (typeof retryOpts.strategy === 'function') {
+      adjustedDelay = retryOpts.strategy(retryCount, error) as number;
+    } else if (retryOpts.strategy === 'exponential') {
+      adjustedDelay = retryConfig.initialRetryDelayMs * Math.pow(backoffMultiplier, retryCount);
+    } else if (retryOpts.strategy === 'linear') {
       adjustedDelay = retryConfig.initialRetryDelayMs * (retryCount + 1);
+    }
+    // Apply jitter if requested
+    if (useJitter) {
+      const jitterFactor = Math.random() * 0.4 + 0.8; // 0.8 – 1.2
+      adjustedDelay = adjustedDelay * jitterFactor;
     }
     const importUrl = cacheKey;
     const cachedComponent = importUrl ? cache.get(importUrl) : null;
@@ -249,7 +416,10 @@ function useRetryDynamicImport(
 
     // --- Remote/CDN import support ---
     let actualImportFunction = importFunction;
-    if (mergedOptions.importFrom && mergedOptions.importFrom !== 'local') {
+    const importType = typeof mergedOptions.importFrom === 'string'
+      ? mergedOptions.importFrom
+      : mergedOptions.importFrom?.type;
+    if (importType && importType !== 'local') {
       // Example: import from CDN/remote (user must provide a compatible import function)
       // actualImportFunction = ...
       // For now, just use the original importFunction
@@ -276,6 +446,11 @@ function useRetryDynamicImport(
           retryImport()
             .then((module) => {
               clearTimeout(timeoutId);
+              // Validate module shape for React.lazy
+              const isValidModule = module && typeof module === 'object' && 'default' in module && module.default;
+              if (!isValidModule) {
+                throw new Error('Invalid module from dynamic import: missing default export');
+              }
               if (importUrl) cache.set(importUrl, module);
               mergedOptions.retry?.onSuccess?.(module);
               dequeueLoad();
@@ -290,7 +465,7 @@ function useRetryDynamicImport(
                 reject(err);
                 return;
               }
-              if (typeof mergedOptions.retry?.retryCondition === 'function' && !mergedOptions.retry.retryCondition(err)) {
+              if (typeof effectiveRetryCondition === 'function' && !effectiveRetryCondition(err)) {
                 clearTimeout(timeoutId);
                 mergedOptions.retry?.onError?.(err);
                 dequeueLoad();
@@ -410,13 +585,50 @@ export const LazyLoader = ({
     size: loaderConfig.size,
     borderSize: loaderConfig.borderSize,
     color: loaderConfig.color,
+    secondaryColor: loaderConfig.secondaryColor,
+    accentColor: loaderConfig.accentColor,
+    gradient: loaderConfig.gradient,
     speed: loaderConfig.speed,
     showRetries: loaderConfig.showRetries,
     showNetworkInfo: loaderConfig.showNetworkInfo,
-    customStyle: loaderConfig.customStyle,
-    animation: loaderConfig.animation,
-    theme,
-    message: loaderConfig.loadingMessage,
+    disableNetworkInfo: loaderConfig.disableNetworkInfo,
+    customStyle: loaderConfig.customStyle || loaderConfig.style,
+    shadow: loaderConfig.shadow,
+    glow: loaderConfig.glow,
+    glowIntensity: loaderConfig.glowIntensity,
+    // Use animationType if available, otherwise fall back to animation
+    animationType: (loaderConfig.animationType || loaderConfig.animation) as any,
+    icon: loaderConfig.icon,
+    progress: loaderConfig.progress,
+    message: loaderConfig.message || loaderConfig.loadingMessage,
+    darkMode: loaderConfig.darkMode || theme === 'dark',
+    labels: {},
+    blurBackground: loaderConfig.blurBackground,
+    backdrop: loaderConfig.backdrop,
+    backdropOpacity: loaderConfig.backdropOpacity,
+    font: loaderConfig.font,
+    rounded: loaderConfig.rounded,
+    floatingStyle: loaderConfig.floatingStyle,
+    pulseEffect: loaderConfig.pulseEffect || loaderConfig.pulse,
+    glassmorphism: loaderConfig.glassmorphism,
+    neumorphism: loaderConfig.neumorphism,
+    vibrantColors: loaderConfig.vibrantColors,
+    smoothTransitions: loaderConfig.smoothTransitions,
+    microInteractions: loaderConfig.microInteractions,
+    particleCount: loaderConfig.particleCount,
+    showLoadingText: loaderConfig.showLoadingText,
+    showPercentage: loaderConfig.showPercentage,
+    customTheme: loaderConfig.customTheme,
+    autoHideDelay: loaderConfig.autoHideDelay,
+    fadeInDuration: loaderConfig.fadeInDuration,
+    scaleEffect: loaderConfig.scaleEffect,
+    colorShift: loaderConfig.colorShift,
+    breathingEffect: loaderConfig.breathingEffect,
+    magneticEffect: loaderConfig.magneticEffect,
+    hoverEffects: loaderConfig.hoverEffects,
+    accessibility: loaderConfig.accessibility,
+    reducedMotion: loaderConfig.reducedMotion,
+    highContrast: loaderConfig.highContrast,
     'aria-label': loaderConfig.a11yLabel,
     role: loaderConfig.a11yRole || 'status',
   };
@@ -519,7 +731,34 @@ export const LazyLoader = ({
             ? <AnimationComponent {...loaderProps} />
             : (fallback || loaderConfig.customLoader || <Loader {...loaderProps} />))
     }>
-      <Component {...rest} />
+      <LazyLoaderErrorBoundary
+        fallback={(err: Error, retryFn: () => void) => {
+          if (typeof loaderConfig.errorFallback === 'function') {
+            return <>{loaderConfig.errorFallback(err, retryFn)}</>;
+          }
+          if (typeof loaderConfig.fallbackStrategy === 'function') {
+            return <>{loaderConfig.fallbackStrategy(err)}</>;
+          }
+          // Default simple fallback
+          return (
+            <div style={{ textAlign: 'center', padding: 24 }} role="alert" aria-live="assertive">
+              <div style={{ color: loaderConfig.errorColor || 'red', marginBottom: 8 }}>
+                {`Error loading component: ${err.message}`}
+              </div>
+              <button
+                onClick={retryFn}
+                style={loaderConfig.retryButtonStyle || { padding: '8px 16px', borderRadius: 4, cursor: 'pointer' }}
+                aria-label={loaderConfig.retryButtonText || 'Retry'}
+              >
+                {loaderConfig.retryButtonText || 'Retry'}
+              </button>
+            </div>
+          );
+        }}
+      >
+        {/* Guard against invalid lazy component modules during tests/mocks */}
+        {Component ? <Component {...rest} /> : null}
+      </LazyLoaderErrorBoundary>
     </Suspense>
   );
 };
@@ -556,6 +795,7 @@ export const prefetchDynamicImport = (
     cache?: { enabled?: boolean; key?: string };
     strategy?: PrefetchStrategy;
     elementRef?: React.RefObject<HTMLElement>;
+    threshold?: number; // <--- new option
   }
 ) => {
   // Eager: prefetch immediately
@@ -593,7 +833,7 @@ export const prefetchDynamicImport = (
         prefetchDynamicImport(importFunction, { ...options, strategy: 'eager' });
         obs.disconnect();
       }
-    });
+    }, { threshold: options.threshold ?? 0 }); // <--- pass threshold
     observer.observe(el);
     return;
   }

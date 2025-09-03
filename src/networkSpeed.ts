@@ -1,7 +1,18 @@
 declare global {
   interface Navigator {
-    connection?: any;
+    connection?: NetworkConnection;
   }
+}
+
+interface NetworkConnection {
+  effectiveType?: string;
+  type?: string;
+  downlink?: number;
+  downlinkMax?: number;
+  rtt?: number;
+  saveData?: boolean;
+  addEventListener?: (type: string, listener: () => void) => void;
+  removeEventListener?: (type: string, listener: () => void) => void;
 }
 
 export interface NetworkInfo {
@@ -25,25 +36,37 @@ const CACHE_TTL = 30_000; // 30 seconds
 
 const listeners: Set<NetworkChangeCallback> = new Set();
 
-function getNavigatorConnection(): any {
+function getNavigatorConnection(): NetworkConnection | null {
   if (typeof navigator !== 'undefined' && navigator.connection) {
     return navigator.connection;
   }
   return null;
 }
 
-function buildInfoFromAPI(conn: any): NetworkInfo {
-  return {
-    effectiveType: conn.effectiveType || 'unknown',
-    type: conn.type,
-    downlink: conn.downlink ?? 0,
-    downlinkMax: conn.downlinkMax,
-    rtt: conn.rtt,
-    saveData: !!conn.saveData,
-    latency: conn.rtt,
-    lastTested: Date.now(),
-    isEstimate: false,
-  };
+function buildInfoFromAPI(conn: NetworkConnection): NetworkInfo {
+  try {
+    return {
+      effectiveType: conn.effectiveType || 'unknown',
+      type: conn.type,
+      downlink: conn.downlink ?? 0,
+      downlinkMax: conn.downlinkMax,
+      rtt: conn.rtt,
+      saveData: !!conn.saveData,
+      latency: conn.rtt,
+      lastTested: Date.now(),
+      isEstimate: false,
+    };
+  } catch (error) {
+    // Handle property access errors gracefully
+    return {
+      effectiveType: 'unknown',
+      downlink: 0,
+      saveData: false,
+      lastTested: Date.now(),
+      isEstimate: true,
+      error: 'Property access error',
+    };
+  }
 }
 
 // Fallback: estimate speed by downloading a small image
@@ -121,12 +144,15 @@ export function subscribeNetworkInfo(cb: NetworkChangeCallback): () => void {
   getNetworkInfo().then(cb);
   // Listen for changes
   const conn = getNavigatorConnection();
-  if (conn && conn.addEventListener) {
+  if (conn && conn.addEventListener && conn.removeEventListener) {
     const handler = () => getNetworkInfo().then(cb);
     conn.addEventListener('change', handler);
     return () => {
       listeners.delete(cb);
-      conn.removeEventListener('change', handler);
+      // Safe to call since we verified conn and removeEventListener exist above
+      if (conn && conn.removeEventListener) {
+        conn.removeEventListener('change', handler);
+      }
     };
   }
   // No real event, just unsubscribe
@@ -139,4 +165,12 @@ export function subscribeNetworkInfo(cb: NetworkChangeCallback): () => void {
 export async function refreshNetworkInfo() {
   const info = await getNetworkInfo(true);
   listeners.forEach((cb) => cb(info));
+}
+
+/**
+ * Clear cache (for testing purposes)
+ */
+export function clearNetworkCache() {
+  cachedInfo = null;
+  cacheTime = 0;
 }

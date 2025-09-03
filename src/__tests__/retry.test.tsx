@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { retryDynamicImport, useRetryDynamicImport, useMergedOptions, LazyLoader } from './retry';
+import { retryDynamicImport, useRetryDynamicImport, useMergedOptions, LazyLoader } from '../retry';
 
 // Mock console.log to avoid test output clutter
 jest.spyOn(console, 'log').mockImplementation();

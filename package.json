@@ -1,9 +1,17 @@
 {
   "name": "react-lazy-loader-js",
-  "version": "1.1.7",
+  "version": "1.2.0",
   "description": "A lightweight and flexible lazy loader for React components with built-in support for retries, caching, prefetching, and priority loading to optimize performance and user experience.",
   "main": "dist/index.js",
+  "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsup",
     "test": "jest"

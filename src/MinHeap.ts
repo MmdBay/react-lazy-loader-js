@@ -1,17 +1,14 @@
 /**
- * So this is our `MinHeap` class. It’s basically a way to keep track of stuff
- * based on how "frequently" we use it. If something is used less often, we can find 
- * it quickly. Think of it like a to-do list where you can grab the least-used task first.
+ * MinHeap implementation for tracking items by frequency.
+ * Efficiently maintains the least frequently used item at the root.
+ * Used by LFU cache for quick access to the least frequently used keys.
  */
 export default class MinHeap<K> {
-    // We’ve got an array (`heap`) that holds all the items (keys) and their frequencies.
-    // `positions` is a map that keeps track of where each key is in the heap array.
     private heap: Array<{ key: K; frequency: number; index: number }>;
-    private positions: Map<K, number>;
+    private positions: Map<K, number>; // Maps keys to their positions in the heap
 
     /**
-     * When we create a new `MinHeap`, we’re just starting with an empty heap and an empty positions map.
-     * This is like resetting everything.
+     * Initialize an empty MinHeap with empty heap array and position tracking map.
      */
     constructor() {
         this.heap = [];
@@ -19,87 +16,80 @@ export default class MinHeap<K> {
     }
 
     /**
-     * `push` is how we add a new key to the heap. We toss in the key and its frequency, 
-     * stick it at the end of the heap, and then make sure the heap stays in the right order by "bubbling it up."
+     * Add a new key with its frequency to the heap.
+     * Places the item at the end and bubbles up to maintain heap property.
      */
     public push(key: K, frequency: number) {
-        const node = { key, frequency, index: this.heap.length }; // Create a new "node" with the key and frequency
-        this.heap.push(node); // Add it to the end of the heap
-        this.positions.set(key, node.index); // Store its position in the `positions` map
-        this.bubbleUp(this.heap.length - 1); // Now we "bubble it up" to keep the heap ordered correctly
+        const node = { key, frequency, index: this.heap.length };
+        this.heap.push(node);
+        this.positions.set(key, node.index);
+        this.bubbleUp(this.heap.length - 1);
     }
 
     /**
-     * `pop` is where we grab the key with the lowest frequency. 
-     * It's always gonna be the one at the top of the heap.
-     * After we grab it, we swap it with the last item in the heap, remove it, and then "bubble down" to restore order.
+     * Remove and return the key with the lowest frequency (root of the heap).
+     * Swaps root with last item, removes it, and bubbles down to restore heap property.
      */
     public pop(): { key: K; frequency: number } | undefined {
-        if (this.isEmpty()) return undefined; // If the heap is empty, return undefined
-        const minItem = this.heap[0]; // The top item (the smallest one)
-        this.swap(0, this.heap.length - 1); // Swap it with the last item
-        this.heap.pop(); // Remove the last item (which used to be the top)
-        this.positions.delete(minItem.key); // Remove the key from the positions map
-        this.bubbleDown(0); // Restore the heap order by "bubbling down" from the top
-        return minItem; // Return the smallest item
+        if (this.isEmpty()) return undefined;
+        const minItem = this.heap[0];
+        this.swap(0, this.heap.length - 1);
+        this.heap.pop();
+        this.positions.delete(minItem.key);
+        this.bubbleDown(0);
+        return minItem;
     }
 
     /**
-     * `remove` is used to kick out a specific key. 
-     * We find the key, swap it with the last item, remove it, and then rebalance the heap 
-     * by either bubbling up or down as needed.
+     * Remove a specific key from the heap.
+     * Swaps with last item, removes it, and rebalances the heap.
      */
     public remove(key: K): void {
-        if (!this.positions.has(key)) return; // If the key’s not in the heap, do nothing
+        if (!this.positions.has(key)) return;
 
-        const indexToRemove = this.positions.get(key)!; // Get the index of the key we want to remove
-        const lastIndex = this.heap.length - 1; // The index of the last item in the heap
+        const indexToRemove = this.positions.get(key)!;
+        const lastIndex = this.heap.length - 1;
 
         if (indexToRemove !== lastIndex) {
-            // If it's not the last item, swap it with the last one
             this.swap(indexToRemove, lastIndex);
-            this.heap.pop(); // Remove the last item
-            this.positions.delete(key); // Remove the key from the map
-            this.bubbleDown(indexToRemove); // Rebalance the heap by bubbling down
-            this.bubbleUp(indexToRemove); // Also bubble up to be safe
+            this.heap.pop();
+            this.positions.delete(key);
+            this.bubbleDown(indexToRemove);
+            this.bubbleUp(indexToRemove);
         } else {
-            // If it *is* the last item, just remove it directly
             this.heap.pop();
             this.positions.delete(key);
         }
     }
 
     /**
-     * `updateFrequency` is used when a key's frequency changes. 
-     * We update its frequency and rebalance the heap by bubbling up or down, as needed.
+     * Update the frequency of a key and rebalance the heap.
      */
     public updateFrequency(key: K, frequency: number): void {
         if (this.positions.has(key)) {
-            const index = this.positions.get(key)!; // Find the index of the key in the heap
-            this.heap[index].frequency = frequency; // Update its frequency
-            this.bubbleDown(index); // Bubble down to maintain heap order
-            this.bubbleUp(index); // Bubble up just to be sure
+            const index = this.positions.get(key)!;
+            this.heap[index].frequency = frequency;
+            this.bubbleDown(index);
+            this.bubbleUp(index);
         }
     }
 
     /**
-     * `bubbleUp` moves a node up the heap if its frequency is too small. 
-     * We keep swapping it with its parent until it's in the right spot.
+     * Move a node up the heap until heap property is satisfied.
      */
     private bubbleUp(index: number) {
         let current = index;
         let parentIdx = this.getParentIndex(current);
 
         while (current > 0 && this.heap[current].frequency < this.heap[parentIdx].frequency) {
-            this.swap(current, parentIdx); // Swap with the parent
-            current = parentIdx; // Move up to the parent
-            parentIdx = this.getParentIndex(current); // Keep going up until it's in the right spot
+            this.swap(current, parentIdx);
+            current = parentIdx;
+            parentIdx = this.getParentIndex(current);
         }
     }
 
     /**
-     * `bubbleDown` moves a node down the heap if its frequency is too big. 
-     * We keep swapping it with the smaller child until it's in the right spot.
+     * Move a node down the heap until heap property is satisfied.
      */
     private bubbleDown(index: number) {
         let current = index;
@@ -107,7 +97,6 @@ export default class MinHeap<K> {
         let right = this.getRightChildIndex(current);
         let smallest = current;
 
-        // Compare with the left and right children and swap with the smallest one
         if (left < this.heap.length && this.heap[left].frequency < this.heap[smallest].frequency) {
             smallest = left;
         }
@@ -117,13 +106,13 @@ export default class MinHeap<K> {
         }
 
         if (smallest !== current) {
-            this.swap(current, smallest); // Swap with the smallest child
-            this.bubbleDown(smallest); // Keep going down until it's in the right place
+            this.swap(current, smallest);
+            this.bubbleDown(smallest);
         }
     }
 
     /**
-     * `swap` switches two items in the heap and updates their positions in the map.
+     * Swap two items in the heap and update their position tracking.
      */
     private swap(index1: number, index2: number) {
         const temp = this.heap[index1];
@@ -136,32 +125,28 @@ export default class MinHeap<K> {
     }
 
     /**
-     * `getParentIndex` is just a little helper to find the parent index of a node.
-     * If you're at index i, your parent is at (i-1)/2.
+     * Get the parent index of a node at the given index.
      */
     private getParentIndex(index: number) {
         return Math.floor((index - 1) / 2);
     }
 
     /**
-     * `getLeftChildIndex` gives you the index of the left child.
-     * If you're at index i, your left child is at 2*i + 1.
+     * Get the left child index of a node at the given index.
      */
     private getLeftChildIndex(index: number) {
         return 2 * index + 1;
     }
 
     /**
-     * `getRightChildIndex` gives you the index of the right child.
-     * If you're at index i, your right child is at 2*i + 2.
+     * Get the right child index of a node at the given index.
      */
     private getRightChildIndex(index: number) {
         return 2 * index + 2;
     }
 
     /**
-     * `isEmpty` is just a simple check to see if the heap is empty.
-     * If the heap is empty, we return true.
+     * Check if the heap is empty.
      */
     public isEmpty() {
         return this.heap.length === 0;

@@ -1,88 +1,86 @@
-import { RetryConfig } from './config'; // Bringing in the retry config, which tells us when to "break the circuit"
+import { RetryConfig } from './config';
 
 export class CircuitBreaker {
-  // We’re keeping track of the number of failed retries (`retryCount`), 
-  // whether the circuit is open (stopped trying) or half-open (kinda testing things out).
+  // Track the number of failed retries and circuit state
   private retryCount: number = 0;
-  private isOpen: boolean = false; // When this is true, we stop making any attempts
-  private isHalfOpen: boolean = false; // Half-open means we're testing if things are back to normal
-  private successThreshold: number; // How many successes we need before we're fully back in action
-  private failureThreshold: number; // How many fails we can take before saying, "Enough!"
-  private resetTimeout: number; // How long we wait before trying again after breaking the circuit
+  private isOpen: boolean = false; // True when circuit is open (no attempts allowed)
+  private isHalfOpen: boolean = false; // True when testing if service is back to normal
+  private successThreshold: number; // Number of successes needed to close the circuit
+  private failureThreshold: number; // Number of failures before opening the circuit
+  private resetTimeout: number; // Wait time before transitioning to half-open state
 
   constructor(config: RetryConfig) {
-    // We grab the failure limit and reset time from the config.
+    // Initialize circuit breaker with configuration values
     this.failureThreshold = config.circuitBreakerThreshold;
     this.resetTimeout = config.resetTimeMs;
-    this.successThreshold = 2;  // We need two successful attempts to close the circuit.
+    this.successThreshold = 2; // Require two successful attempts to close the circuit
   }
 
   /**
-   * This is the part where we handle failures.
-   * If the number of retries is more than the failureThreshold, we "open" the circuit, 
-   * which basically means we stop making further attempts for a while.
+   * Handle failure events and determine if the circuit should be opened.
+   * If the failure threshold is exceeded, the circuit opens to prevent further attempts.
    */
   public handleFailure(): boolean {
-    if (this.isOpen) { // If the circuit is already open, we don’t bother trying again
+    if (this.isOpen) {
       console.log("Circuit breaker is open, rejecting further attempts.");
       return true;
     }
 
-    this.retryCount += 1; // Add one to the retry count every time we fail
+    this.retryCount += 1;
     console.log(`Failure detected, retry count: ${this.retryCount}`);
 
-    if (this.retryCount >= this.failureThreshold) { // If we fail too many times, we break the circuit
+    if (this.retryCount >= this.failureThreshold) {
       this.openCircuit();
       return true; // Circuit is open, no more retries
     }
 
-    return false; // Not enough fails yet, keep trying
+    return false; // Continue trying
   }
 
   /**
-   * This handles successful attempts. If we're in the half-open state, 
-   * we need to see a few successful retries before we can fully close the circuit and go back to normal.
+   * Handle successful attempts. In half-open state, successful attempts move us closer
+   * to closing the circuit and returning to normal operation.
    */
   public handleSuccess(): void {
-    if (this.isHalfOpen) { // If we're testing the waters after being half-open...
-      this.retryCount = 0;  // Reset the fail count since we’ve got a success
+    if (this.isHalfOpen) {
+      this.retryCount = 0; // Reset failure count on success
       console.log(`Success detected in half-open state, retry count reset to 0.`);
 
-      this.successThreshold -= 1; // We need a couple of successes before closing the circuit
+      this.successThreshold -= 1;
       if (this.successThreshold <= 0) {
-        this.closeCircuit(); // After enough successes, close the circuit completely
+        this.closeCircuit();
         console.log("Circuit breaker is now closed after successful attempts.");
       }
     }
   }
 
   /**
-   * When things go bad and we fail too many times, we "open" the circuit. 
-   * This means we stop making further attempts for a bit and then move into the half-open state to test things.
+   * Open the circuit breaker after too many failures.
+   * Sets a timeout to transition to half-open state for testing recovery.
    */
   private openCircuit(): void {
     console.log("Circuit breaker is now open.");
-    this.isOpen = true; // Circuit is officially open (we're not trying anymore)
+    this.isOpen = true;
     setTimeout(() => {
-      this.isOpen = false; // After the timeout, we move to half-open, to see if things have improved
+      this.isOpen = false;
       this.isHalfOpen = true;
       console.log("Circuit breaker is now half-open, testing for stability.");
-    }, this.resetTimeout); // We'll wait for the resetTimeout before trying again
+    }, this.resetTimeout);
   }
 
   /**
-   * If things go well, we can "close" the circuit, which means we're fully operational again.
+   * Close the circuit breaker when service has recovered.
+   * Returns to normal operational state.
    */
   private closeCircuit(): void {
-    this.isHalfOpen = false; // We're no longer testing
-    this.isOpen = false; // Circuit is fully closed, back to normal
-    this.retryCount = 0; // Reset the fail count
+    this.isHalfOpen = false;
+    this.isOpen = false;
+    this.retryCount = 0;
     console.log("Circuit breaker is now fully closed and operational.");
   }
 
   /**
-   * This is just a quick check to see if the circuit breaker is open.
-   * If it is, we’re not making any new attempts.
+   * Check if the circuit breaker is currently open (blocking attempts).
    */
   public isCircuitOpen(): boolean {
     return this.isOpen;

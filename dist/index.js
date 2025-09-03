@@ -80,9 +80,19 @@ var __async = (__this, __arguments, generator) => {
 var src_exports = {};
 __export(src_exports, {
   LazyLoader: () => LazyLoader,
+  LazyLoaderErrorBoundary: () => LazyLoaderErrorBoundary,
+  LazyLoaderProvider: () => LazyLoaderProvider,
+  Loader: () => LoadingSpinner_default,
+  LoaderAnimationRegistryProvider: () => LoaderAnimationRegistryProvider,
+  LoaderThemeProvider: () => LoaderThemeProvider,
+  createCustomCache: () => createCustomCache,
   prefetchDynamicImport: () => prefetchDynamicImport,
   priorityLoadComponent: () => priorityLoadComponent,
-  retryDynamicImport: () => retryDynamicImport
+  registerLoaderAnimation: () => registerLoaderAnimation,
+  registerLoaderTheme: () => registerLoaderTheme,
+  retryDynamicImport: () => retryDynamicImport,
+  useLoaderTelemetry: () => useLoaderTelemetry,
+  useRetryDynamicImport: () => useRetryDynamicImport
 });
 module.exports = __toCommonJS(src_exports);
 
@@ -98,17 +108,28 @@ function getNavigatorConnection() {
 }
 function buildInfoFromAPI(conn) {
   var _a;
-  return {
-    effectiveType: conn.effectiveType || "unknown",
-    type: conn.type,
-    downlink: (_a = conn.downlink) != null ? _a : 0,
-    downlinkMax: conn.downlinkMax,
-    rtt: conn.rtt,
-    saveData: !!conn.saveData,
-    latency: conn.rtt,
-    lastTested: Date.now(),
-    isEstimate: false
-  };
+  try {
+    return {
+      effectiveType: conn.effectiveType || "unknown",
+      type: conn.type,
+      downlink: (_a = conn.downlink) != null ? _a : 0,
+      downlinkMax: conn.downlinkMax,
+      rtt: conn.rtt,
+      saveData: !!conn.saveData,
+      latency: conn.rtt,
+      lastTested: Date.now(),
+      isEstimate: false
+    };
+  } catch (error) {
+    return {
+      effectiveType: "unknown",
+      downlink: 0,
+      saveData: false,
+      lastTested: Date.now(),
+      isEstimate: true,
+      error: "Property access error"
+    };
+  }
 }
 function estimateSpeedByImage() {
   return __async(this, null, function* () {
@@ -151,22 +172,22 @@ function getNetworkInfo(forceRefresh = false) {
 }
 
 // src/retry.tsx
-var import_react2 = __toESM(require("react"));
+var import_react3 = __toESM(require("react"));
 
 // src/config.ts
 var defaultConfig = {
   circuitBreakerThreshold: 5,
-  // This is like, “Yo, after 5 fails, stop trying. Take a break.”
+  // After 5 failures, stop trying and take a break
   resetTimeMs: 3e4,
-  // We’ll chill for 30 seconds before we give it another go.
+  // Wait 30 seconds before trying again after circuit breaker opens
   maxRetryCount: 15,
-  // If we fail, we’ll try again up to 15 times before throwing in the towel.
+  // Try up to 15 times before giving up
   initialRetryDelayMs: 500,
-  // On the first fail, we’ll wait half a second before trying again.
+  // Wait 500ms before first retry
   maxRetryDelayMs: 5e3,
-  // But if we keep failing, the wait time can go up to 5 seconds between retries.
+  // Maximum wait time between retries is 5 seconds
   timeoutMs: 3e4
-  // And if a task takes more than 30 seconds, we say, "Forget it!"
+  // Timeout after 30 seconds
 };
 function getConfig(overrides) {
   return __spreadValues(__spreadValues({}, defaultConfig), overrides);
@@ -174,17 +195,17 @@ function getConfig(overrides) {
 
 // src/MinHeap.ts
 var MinHeap = class {
+  // Maps keys to their positions in the heap
   /**
-   * When we create a new `MinHeap`, we’re just starting with an empty heap and an empty positions map.
-   * This is like resetting everything.
+   * Initialize an empty MinHeap with empty heap array and position tracking map.
    */
   constructor() {
     this.heap = [];
     this.positions = /* @__PURE__ */ new Map();
   }
   /**
-   * `push` is how we add a new key to the heap. We toss in the key and its frequency, 
-   * stick it at the end of the heap, and then make sure the heap stays in the right order by "bubbling it up."
+   * Add a new key with its frequency to the heap.
+   * Places the item at the end and bubbles up to maintain heap property.
    */
   push(key, frequency) {
     const node = { key, frequency, index: this.heap.length };
@@ -193,9 +214,8 @@ var MinHeap = class {
     this.bubbleUp(this.heap.length - 1);
   }
   /**
-   * `pop` is where we grab the key with the lowest frequency. 
-   * It's always gonna be the one at the top of the heap.
-   * After we grab it, we swap it with the last item in the heap, remove it, and then "bubble down" to restore order.
+   * Remove and return the key with the lowest frequency (root of the heap).
+   * Swaps root with last item, removes it, and bubbles down to restore heap property.
    */
   pop() {
     if (this.isEmpty()) return void 0;
@@ -207,9 +227,8 @@ var MinHeap = class {
     return minItem;
   }
   /**
-   * `remove` is used to kick out a specific key. 
-   * We find the key, swap it with the last item, remove it, and then rebalance the heap 
-   * by either bubbling up or down as needed.
+   * Remove a specific key from the heap.
+   * Swaps with last item, removes it, and rebalances the heap.
    */
   remove(key) {
     if (!this.positions.has(key)) return;
@@ -227,8 +246,7 @@ var MinHeap = class {
     }
   }
   /**
-   * `updateFrequency` is used when a key's frequency changes. 
-   * We update its frequency and rebalance the heap by bubbling up or down, as needed.
+   * Update the frequency of a key and rebalance the heap.
    */
   updateFrequency(key, frequency) {
     if (this.positions.has(key)) {
@@ -239,8 +257,7 @@ var MinHeap = class {
     }
   }
   /**
-   * `bubbleUp` moves a node up the heap if its frequency is too small. 
-   * We keep swapping it with its parent until it's in the right spot.
+   * Move a node up the heap until heap property is satisfied.
    */
   bubbleUp(index) {
     let current = index;
@@ -252,8 +269,7 @@ var MinHeap = class {
     }
   }
   /**
-   * `bubbleDown` moves a node down the heap if its frequency is too big. 
-   * We keep swapping it with the smaller child until it's in the right spot.
+   * Move a node down the heap until heap property is satisfied.
    */
   bubbleDown(index) {
     let current = index;
@@ -272,7 +288,7 @@ var MinHeap = class {
     }
   }
   /**
-   * `swap` switches two items in the heap and updates their positions in the map.
+   * Swap two items in the heap and update their position tracking.
    */
   swap(index1, index2) {
     const temp = this.heap[index1];
@@ -284,29 +300,25 @@ var MinHeap = class {
     this.positions.set(this.heap[index2].key, index2);
   }
   /**
-   * `getParentIndex` is just a little helper to find the parent index of a node.
-   * If you're at index i, your parent is at (i-1)/2.
+   * Get the parent index of a node at the given index.
    */
   getParentIndex(index) {
     return Math.floor((index - 1) / 2);
   }
   /**
-   * `getLeftChildIndex` gives you the index of the left child.
-   * If you're at index i, your left child is at 2*i + 1.
+   * Get the left child index of a node at the given index.
    */
   getLeftChildIndex(index) {
     return 2 * index + 1;
   }
   /**
-   * `getRightChildIndex` gives you the index of the right child.
-   * If you're at index i, your right child is at 2*i + 2.
+   * Get the right child index of a node at the given index.
    */
   getRightChildIndex(index) {
     return 2 * index + 2;
   }
   /**
-   * `isEmpty` is just a simple check to see if the heap is empty.
-   * If the heap is empty, we return true.
+   * Check if the heap is empty.
    */
   isEmpty() {
     return this.heap.length === 0;
@@ -315,8 +327,7 @@ var MinHeap = class {
 
 // src/cache.ts
 var LFUCache = class {
-  // MinHeap helps us keep track of the least frequently used items
-  // In the constructor, we set the capacity and TTL for the cache.
+  // Tracks frequency for efficient LFU eviction
   constructor(capacity, ttl) {
     this.capacity = capacity;
     this.ttl = ttl;
@@ -324,8 +335,7 @@ var LFUCache = class {
     this.heap = new MinHeap();
   }
   /**
-   * `get` is how we grab an item from the cache. If it's still valid (not expired),
-   * we return it and increase its frequency because, well, we just used it.
+   * Retrieve an item from the cache. Updates frequency on access and removes expired items.
    */
   get(key) {
     const cacheItem = this.cache.get(key);
@@ -341,31 +351,29 @@ var LFUCache = class {
     return cacheItem.value;
   }
   /**
-   * `set` adds a new item to the cache. If we’re at full capacity, we gotta kick out 
-   * the least-used item to make space. If the item already exists, we just update it.
+   * Add or update an item in the cache. Evicts least frequently used item if at capacity.
    */
   set(key, value) {
+    if (this.capacity === 0) {
+      return;
+    }
     if (this.cache.has(key)) {
       this.cache.delete(key);
       this.heap.remove(key);
     }
-    if (this.cache.size === this.capacity) {
+    if (this.cache.size >= this.capacity) {
       this.evictLeastFrequentlyUsed();
     }
     const newItem = {
-      // Create a new cache entry with the value, TTL, and an initial frequency of 1
       value,
       expiry: Date.now() + this.ttl,
-      // Set when this item should expire
       frequency: 1
-      // New items start with a frequency of 1
     };
     this.cache.set(key, newItem);
     this.heap.push(key, newItem.frequency);
   }
   /**
-   * `evictLeastFrequentlyUsed` kicks out the item that’s been used the least.
-   * We call this when the cache is full and we need space for new stuff.
+   * Remove the least frequently used item from the cache to make space for new items.
    */
   evictLeastFrequentlyUsed() {
     const leastFrequentKey = this.heap.pop();
@@ -427,22 +435,20 @@ var getRetryImportFunction = (originalImport, retryCount) => {
 
 // src/circuitBreaker.ts
 var CircuitBreaker = class {
-  // How long we wait before trying again after breaking the circuit
+  // Wait time before transitioning to half-open state
   constructor(config) {
-    // We’re keeping track of the number of failed retries (`retryCount`), 
-    // whether the circuit is open (stopped trying) or half-open (kinda testing things out).
+    // Track the number of failed retries and circuit state
     this.retryCount = 0;
     this.isOpen = false;
-    // When this is true, we stop making any attempts
+    // True when circuit is open (no attempts allowed)
     this.isHalfOpen = false;
     this.failureThreshold = config.circuitBreakerThreshold;
     this.resetTimeout = config.resetTimeMs;
     this.successThreshold = 2;
   }
   /**
-   * This is the part where we handle failures.
-   * If the number of retries is more than the failureThreshold, we "open" the circuit, 
-   * which basically means we stop making further attempts for a while.
+   * Handle failure events and determine if the circuit should be opened.
+   * If the failure threshold is exceeded, the circuit opens to prevent further attempts.
    */
   handleFailure() {
     if (this.isOpen) {
@@ -458,8 +464,8 @@ var CircuitBreaker = class {
     return false;
   }
   /**
-   * This handles successful attempts. If we're in the half-open state, 
-   * we need to see a few successful retries before we can fully close the circuit and go back to normal.
+   * Handle successful attempts. In half-open state, successful attempts move us closer
+   * to closing the circuit and returning to normal operation.
    */
   handleSuccess() {
     if (this.isHalfOpen) {
@@ -473,8 +479,8 @@ var CircuitBreaker = class {
     }
   }
   /**
-   * When things go bad and we fail too many times, we "open" the circuit. 
-   * This means we stop making further attempts for a bit and then move into the half-open state to test things.
+   * Open the circuit breaker after too many failures.
+   * Sets a timeout to transition to half-open state for testing recovery.
    */
   openCircuit() {
     console.log("Circuit breaker is now open.");
@@ -486,7 +492,8 @@ var CircuitBreaker = class {
     }, this.resetTimeout);
   }
   /**
-   * If things go well, we can "close" the circuit, which means we're fully operational again.
+   * Close the circuit breaker when service has recovered.
+   * Returns to normal operational state.
    */
   closeCircuit() {
     this.isHalfOpen = false;
@@ -495,8 +502,7 @@ var CircuitBreaker = class {
     console.log("Circuit breaker is now fully closed and operational.");
   }
   /**
-   * This is just a quick check to see if the circuit breaker is open.
-   * If it is, we’re not making any new attempts.
+   * Check if the circuit breaker is currently open (blocking attempts).
    */
   isCircuitOpen() {
     return this.isOpen;
@@ -506,35 +512,72 @@ var CircuitBreaker = class {
 // src/LoadingSpinner.tsx
 var import_react = __toESM(require("react"));
 var defaultLabels = {
-  retryLabel: "\u062A\u0644\u0627\u0634 \u0645\u062C\u062F\u062F",
-  speedLabel: "\u0633\u0631\u0639\u062A",
-  typeLabel: "\u0646\u0648\u0639 \u0627\u062A\u0635\u0627\u0644",
-  saveDataLabel: "\u0635\u0631\u0641\u0647\u200C\u062C\u0648\u06CC\u06CC \u062F\u06CC\u062A\u0627",
-  saveDataOn: "\u0641\u0639\u0627\u0644",
-  saveDataOff: "\u063A\u06CC\u0631\u0641\u0639\u0627\u0644",
-  gettingLabel: "\u062F\u0631 \u062D\u0627\u0644 \u062F\u0631\u06CC\u0627\u0641\u062A...",
+  retryLabel: "Retry",
+  speedLabel: "Network Speed",
+  typeLabel: "Connection",
+  saveDataLabel: "Data Saver",
+  saveDataOn: "On",
+  saveDataOff: "Off",
+  gettingLabel: "Calculating...",
   percentLabel: (progress) => `${progress}%`,
-  messageLabel: ""
+  messageLabel: "",
+  loadingLabel: "Loading",
+  completedLabel: "Completed",
+  errorLabel: "Error"
 };
 var Loader = ({
-  size = 60,
+  size = 80,
   borderSize = 6,
-  color = "#4f8cff",
+  color = "#6366f1",
+  secondaryColor = "#e0e7ff",
+  accentColor = "#8b5cf6",
   gradient,
   speed = 1.2,
   retries = 0,
   showRetries = true,
   showNetworkInfo = true,
+  disableNetworkInfo = false,
   customStyle = {},
-  shadow = "0 0 24px 0 #4f8cff55",
+  shadow = "0 0 32px 0 rgba(99, 102, 241, 0.3)",
   glow = true,
-  animationType = "spinner",
+  glowIntensity = 0.6,
+  animationType = "spin",
   icon,
   progress,
   message,
   darkMode = false,
   children,
-  labels = {}
+  labels = {},
+  blurBackground = true,
+  backdrop = true,
+  backdropOpacity = 0.7,
+  font = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  rounded = true,
+  floatingStyle = true,
+  pulseEffect = false,
+  // New advanced options with defaults
+  glassmorphism = false,
+  neumorphism = false,
+  vibrantColors = false,
+  smoothTransitions = true,
+  microInteractions = true,
+  particleCount = 6,
+  showLoadingText = true,
+  showPercentage = true,
+  audioFeedback = false,
+  hapticFeedback = false,
+  customTheme = "modern",
+  autoHideDelay = 0,
+  fadeInDuration = 800,
+  scaleEffect = true,
+  rotationIntensity = 1,
+  colorShift = false,
+  breathingEffect = false,
+  magneticEffect = false,
+  hoverEffects = true,
+  accessibility = true,
+  reducedMotion = false,
+  highContrast = false
 }) => {
   const mergedLabels = __spreadValues(__spreadValues({}, defaultLabels), labels);
   const [networkInfo, setNetworkInfo] = (0, import_react.useState)({
@@ -542,57 +585,304 @@ var Loader = ({
     effectiveType: "unknown",
     saveData: false
   });
+  const [isVisible, setIsVisible] = (0, import_react.useState)(false);
+  const [loadingPhase, setLoadingPhase] = (0, import_react.useState)("loading");
+  const [mousePosition, setMousePosition] = (0, import_react.useState)({ x: 0, y: 0 });
   const updateNetworkInfo = (0, import_react.useCallback)(() => {
+    let isMounted = true;
     getNetworkInfo().then((info) => {
-      setNetworkInfo((prevInfo) => {
-        if (info.downlink !== prevInfo.downlink || info.effectiveType !== prevInfo.effectiveType || info.saveData !== prevInfo.saveData) {
-          return info;
-        }
-        return prevInfo;
-      });
+      if (isMounted) {
+        setNetworkInfo((prevInfo) => {
+          if (info.downlink !== prevInfo.downlink || info.effectiveType !== prevInfo.effectiveType || info.saveData !== prevInfo.saveData) {
+            return info;
+          }
+          return prevInfo;
+        });
+      }
+    }).catch(() => {
     });
+    return () => {
+      isMounted = false;
+    };
   }, []);
   (0, import_react.useEffect)(() => {
-    updateNetworkInfo();
+    const timer = setTimeout(() => setIsVisible(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
+  (0, import_react.useEffect)(() => {
+    if (autoHideDelay > 0) {
+      const timer = setTimeout(() => {
+        setLoadingPhase("completing");
+        setTimeout(() => setLoadingPhase("completed"), 500);
+      }, autoHideDelay);
+      return () => clearTimeout(timer);
+    }
+  }, [autoHideDelay]);
+  (0, import_react.useEffect)(() => {
+    if (typeof progress === "number") {
+      if (progress >= 100) {
+        setLoadingPhase("completing");
+        setTimeout(() => setLoadingPhase("completed"), 800);
+      } else if (progress >= 95) {
+        setLoadingPhase("completing");
+      } else {
+        setLoadingPhase("loading");
+      }
+    }
+  }, [progress]);
+  (0, import_react.useEffect)(() => {
+    if (magneticEffect) {
+      const handleMouseMove = (e) => {
+        setMousePosition({ x: e.clientX, y: e.clientY });
+      };
+      window.addEventListener("mousemove", handleMouseMove);
+      return () => window.removeEventListener("mousemove", handleMouseMove);
+    }
+  }, [magneticEffect]);
+  (0, import_react.useEffect)(() => {
+    if (disableNetworkInfo) return;
+    if (typeof window !== "undefined" && window.__JEST__) return;
+    const cleanup = updateNetworkInfo();
     const connection = navigator.connection;
     if (connection && connection.addEventListener) {
       connection.addEventListener("change", updateNetworkInfo);
     }
     return () => {
+      if (cleanup) cleanup();
       if (connection && connection.removeEventListener) {
         connection.removeEventListener("change", updateNetworkInfo);
       }
     };
-  }, [updateNetworkInfo]);
+  }, [updateNetworkInfo, disableNetworkInfo]);
   (0, import_react.useEffect)(() => {
-    if (typeof window !== "undefined" && !document.getElementById("loader-keyframes")) {
-      const style = document.createElement("style");
-      style.id = "loader-keyframes";
-      style.innerHTML = `
-        @keyframes spin { 0% { transform: rotate(0deg);} 100% { transform: rotate(360deg);} }
-        @keyframes pulse { 0% { opacity: 0.7; transform: scale(1);} 50% { opacity: 0.2; transform: scale(1.15);} 100% { opacity: 0.7; transform: scale(1);} }
-        @keyframes dot-bounce { 0%, 80%, 100% { transform: scale(0);} 40% { transform: scale(1);} }
-        @keyframes wave { 0%, 40%, 100% { transform: scaleY(0.4);} 20% { transform: scaleY(1.0);} }
-        @keyframes bar { 0% { left: -40%; } 100% { left: 100%; } }
-      `;
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+    let style = document.getElementById("advanced-loader-keyframes");
+    if (!style) {
+      style = document.createElement("style");
+      style.id = "advanced-loader-keyframes";
       document.head.appendChild(style);
     }
+    style.innerHTML = `
+      @keyframes spin { 
+        from { transform: rotate(0deg); } 
+        to { transform: rotate(360deg); } 
+      }
+      @keyframes pulse { 
+        0% { opacity: 0.4; transform: scale(0.95); } 
+        50% { opacity: 1; transform: scale(1.05); } 
+        100% { opacity: 0.4; transform: scale(0.95); } 
+      }
+      @keyframes dot-bounce { 
+        0%, 80%, 100% { transform: scale(0) translateY(0); } 
+        40% { transform: scale(1) translateY(-10px); } 
+      }
+      @keyframes wave { 
+        0%, 40%, 100% { transform: scaleY(0.4); } 
+        20% { transform: scaleY(1.0); } 
+      }
+      @keyframes bar { 
+        0% { left: -35%; } 
+        100% { left: 100%; } 
+      }
+      @keyframes ripple {
+        0% { 
+          transform: scale(0);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(1);
+          opacity: 0;
+        }
+      }
+      @keyframes square {
+        0% { transform: rotate(0deg); }
+        25% { transform: rotate(90deg); }
+        50% { transform: rotate(180deg); }
+        75% { transform: rotate(270deg); }
+        100% { transform: rotate(360deg); }
+      }
+      @keyframes infinity {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      @keyframes cube {
+        0%, 70%, 100% { transform: scale(1); }
+        35% { transform: scale(1.2); }
+      }
+      @keyframes float {
+        0% { transform: translateY(0px); }
+        50% { transform: translateY(-15px); }
+        100% { transform: translateY(0px); }
+      }
+      @keyframes spiral {
+        0% { transform: rotate(0deg) scale(1); }
+        50% { transform: rotate(180deg) scale(1.1); }
+        100% { transform: rotate(360deg) scale(1); }
+      }
+      @keyframes orbit {
+        0% { transform: rotate(0deg) translateX(20px) rotate(0deg); }
+        100% { transform: rotate(360deg) translateX(20px) rotate(-360deg); }
+      }
+      @keyframes bounce {
+        0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+        40% { transform: translateY(-20px); }
+        60% { transform: translateY(-10px); }
+      }
+      @keyframes morph {
+        0% { border-radius: 50%; transform: rotate(0deg); }
+        25% { border-radius: 0%; transform: rotate(90deg); }
+        50% { border-radius: 50%; transform: rotate(180deg); }
+        75% { border-radius: 0%; transform: rotate(270deg); }
+        100% { border-radius: 50%; transform: rotate(360deg); }
+      }
+      @keyframes gradient-spin {
+        0% { transform: rotate(0deg); filter: hue-rotate(0deg); }
+        100% { transform: rotate(360deg); filter: hue-rotate(360deg); }
+      }
+      @keyframes elastic {
+        0% { transform: scale(1) rotateZ(0deg); }
+        50% { transform: scale(1.25) rotateZ(180deg); }
+        100% { transform: scale(1) rotateZ(360deg); }
+      }
+      @keyframes flip {
+        0% { transform: rotateY(0deg); }
+        50% { transform: rotateY(180deg); }
+        100% { transform: rotateY(360deg); }
+      }
+      @keyframes scale {
+        0% { transform: scale(0.8); }
+        50% { transform: scale(1.2); }
+        100% { transform: scale(0.8); }
+      }
+      @keyframes particles {
+        0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+        100% { transform: translateY(-50px) rotate(360deg); opacity: 0; }
+      }
+      @keyframes neon {
+        0% { 
+          box-shadow: 0 0 10px currentColor, 0 0 20px currentColor; 
+          text-shadow: 0 0 10px currentColor, 0 0 20px currentColor; 
+        }
+        50% { 
+          box-shadow: 0 0 20px currentColor, 0 0 30px currentColor, 0 0 40px currentColor; 
+          text-shadow: 0 0 20px currentColor, 0 0 30px currentColor, 0 0 40px currentColor; 
+        }
+        100% { 
+          box-shadow: 0 0 10px currentColor, 0 0 20px currentColor; 
+          text-shadow: 0 0 10px currentColor, 0 0 20px currentColor; 
+        }
+      }
+      @keyframes breathe {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+      }
+      @keyframes fadeIn {
+        0% { opacity: 0; transform: scale(0.9) translateY(20px); }
+        100% { opacity: 1; transform: scale(1) translateY(0); }
+      }
+      @keyframes slideIn {
+        0% { transform: translateY(100px); opacity: 0; }
+        100% { transform: translateY(0); opacity: 1; }
+      }
+      @keyframes shimmer {
+        0% { background-position: -200px 0; }
+        100% { background-position: calc(200px + 100%) 0; }
+      }
+      @keyframes colorShift {
+        0% { filter: hue-rotate(0deg); }
+        100% { filter: hue-rotate(360deg); }
+      }
+    `;
   }, []);
-  const spinnerBorder = gradient ? `conic-gradient(${gradient.join(", ")})` : void 0;
+  const themes = {
+    modern: {
+      background: darkMode ? "rgba(15, 23, 42, 0.95)" : "rgba(255, 255, 255, 0.95)",
+      card: darkMode ? "rgba(30, 41, 59, 0.9)" : "rgba(248, 250, 252, 0.9)",
+      text: darkMode ? "#f1f5f9" : "#0f172a",
+      textSecondary: darkMode ? "#94a3b8" : "#64748b",
+      highlight: color,
+      shadow: darkMode ? "0 25px 50px -12px rgba(0, 0, 0, 0.25)" : "0 25px 50px -12px rgba(0, 0, 0, 0.15)",
+      border: darkMode ? "rgba(51, 65, 85, 0.3)" : "rgba(226, 232, 240, 0.3)"
+    },
+    glass: {
+      background: darkMode ? "rgba(0, 0, 0, 0.3)" : "rgba(255, 255, 255, 0.1)",
+      card: darkMode ? "rgba(255, 255, 255, 0.05)" : "rgba(255, 255, 255, 0.1)",
+      text: darkMode ? "#ffffff" : "#000000",
+      textSecondary: darkMode ? "#cbd5e1" : "#475569",
+      highlight: color,
+      shadow: "0 8px 32px 0 rgba(31, 38, 135, 0.37)",
+      border: "rgba(255, 255, 255, 0.18)"
+    },
+    neon: {
+      background: "rgba(0, 0, 0, 0.9)",
+      card: "rgba(20, 20, 20, 0.8)",
+      text: "#00ffff",
+      textSecondary: "#ff00ff",
+      highlight: "#00ff00",
+      shadow: "0 0 50px rgba(0, 255, 255, 0.5)",
+      border: "rgba(0, 255, 255, 0.3)"
+    },
+    minimal: {
+      background: darkMode ? "#000000" : "#ffffff",
+      card: darkMode ? "#111111" : "#f9f9f9",
+      text: darkMode ? "#ffffff" : "#000000",
+      textSecondary: darkMode ? "#888888" : "#666666",
+      highlight: color,
+      shadow: "none",
+      border: darkMode ? "#333333" : "#eeeeee"
+    },
+    gradient: {
+      background: `linear-gradient(135deg, ${darkMode ? "#667eea 0%, #764ba2 100%" : "#f093fb 0%, #f5576c 100%"})`,
+      card: "rgba(255, 255, 255, 0.1)",
+      text: "#ffffff",
+      textSecondary: "#f0f0f0",
+      highlight: "#ffffff",
+      shadow: "0 20px 40px rgba(0, 0, 0, 0.1)",
+      border: "rgba(255, 255, 255, 0.2)"
+    },
+    classic: {
+      background: darkMode ? "#2d3748" : "#f7fafc",
+      card: darkMode ? "#4a5568" : "#ffffff",
+      text: darkMode ? "#e2e8f0" : "#2d3748",
+      textSecondary: darkMode ? "#a0aec0" : "#718096",
+      highlight: color,
+      shadow: darkMode ? "0 10px 25px rgba(0, 0, 0, 0.3)" : "0 10px 25px rgba(0, 0, 0, 0.1)",
+      border: darkMode ? "#718096" : "#e2e8f0"
+    }
+  };
+  const currentTheme = themes[customTheme] || themes.modern;
+  const enhancedGradient = gradient || (vibrantColors ? [
+    "#ff0099",
+    "#00ff99",
+    "#9900ff",
+    "#ff9900",
+    "#0099ff"
+  ] : [color, accentColor]);
+  const spinnerBorder = enhancedGradient.length > 1 ? `conic-gradient(${enhancedGradient.join(", ")})` : void 0;
+  const floatingAnimation = floatingStyle ? {
+    animation: `float 3s ease-in-out infinite${breathingEffect ? ", breathe 2s ease-in-out infinite" : ""}`
+  } : {};
+  function hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : "99, 102, 241";
+  }
   const renderSpinner = () => /* @__PURE__ */ import_react.default.createElement(
     "div",
     {
-      style: __spreadValues({
+      style: __spreadValues(__spreadValues({
         width: size,
         height: size,
-        border: `${borderSize}px solid #e0e7ff`,
+        border: `${borderSize}px solid ${secondaryColor}`,
         borderTop: `${borderSize}px solid ${color}`,
         borderRadius: "50%",
-        boxShadow: shadow,
-        animation: `spin ${speed}s cubic-bezier(.68,-0.55,.27,1.55) infinite`,
+        animation: `spin ${speed}s linear infinite${colorShift ? ", colorShift 4s linear infinite" : ""}`,
         position: "relative",
-        background: spinnerBorder
-      }, glow ? { filter: `drop-shadow(0 0 12px ${color}99)` } : {})
+        display: "inline-block",
+        background: "transparent"
+      }, glow ? {
+        boxShadow: `0 0 ${Math.round(size / 4)}px rgba(${hexToRgb(color)}, ${glowIntensity}), inset 0 0 ${Math.round(size / 8)}px rgba(${hexToRgb(color)}, ${glowIntensity / 2})`
+      } : {}), floatingAnimation)
     },
     typeof progress === "number" && /* @__PURE__ */ import_react.default.createElement(
       "svg",
@@ -614,56 +904,361 @@ var Loader = ({
           cy: size / 2,
           r: (size - borderSize) / 2.2,
           fill: "none",
-          stroke: color,
+          stroke: accentColor,
           strokeWidth: borderSize,
           strokeDasharray: 2 * Math.PI * ((size - borderSize) / 2.2),
           strokeDashoffset: 2 * Math.PI * ((size - borderSize) / 2.2) * (1 - progress / 100),
-          style: { transition: "stroke-dashoffset 0.4s" }
+          style: {
+            transition: smoothTransitions ? "stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1)" : "none",
+            filter: glow ? `drop-shadow(0 0 8px ${accentColor})` : void 0
+          }
         }
       )
     )
   );
-  const renderDots = () => /* @__PURE__ */ import_react.default.createElement("div", { style: { display: "flex", gap: size * 0.12 } }, [0, 1, 2].map((i) => /* @__PURE__ */ import_react.default.createElement(
+  const renderGradientSpin = () => /* @__PURE__ */ import_react.default.createElement(
     "div",
     {
-      key: i,
-      style: {
-        width: size * 0.22,
-        height: size * 0.22,
+      style: __spreadProps(__spreadValues(__spreadValues({
+        width: size,
+        height: size,
+        background: `conic-gradient(from 0deg, ${enhancedGradient.join(", ")}, ${enhancedGradient[0]})`,
         borderRadius: "50%",
-        background: gradient ? `linear-gradient(135deg, ${gradient.join(", ")})` : color,
-        animation: `dot-bounce 1.4s infinite both`,
-        animationDelay: `${i * 0.16}s`,
-        boxShadow: glow ? `0 0 8px ${color}99` : void 0
+        animation: `spin ${speed}s linear infinite`,
+        position: "relative",
+        display: "inline-block"
+      }, floatingAnimation), glow ? {
+        boxShadow: `0 0 ${size / 2}px rgba(${hexToRgb(color)}, ${glowIntensity})`
+      } : {}), {
+        padding: borderSize
+      })
+    },
+    /* @__PURE__ */ import_react.default.createElement(
+      "div",
+      {
+        style: {
+          width: `${size - borderSize * 2}px`,
+          height: `${size - borderSize * 2}px`,
+          borderRadius: "50%",
+          background: currentTheme.card,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        }
+      },
+      typeof progress === "number" && /* @__PURE__ */ import_react.default.createElement(
+        "span",
+        {
+          style: {
+            fontSize: size * 0.2,
+            fontWeight: "bold",
+            color: currentTheme.text
+          }
+        },
+        progress,
+        "%"
+      )
+    )
+  );
+  const renderDots = () => /* @__PURE__ */ import_react.default.createElement("div", { style: __spreadValues({
+    display: "flex",
+    gap: size * 0.15,
+    alignItems: "center",
+    justifyContent: "center"
+  }, floatingAnimation) }, Array.from({ length: Math.min(particleCount, 5) }, (_, i) => {
+    const dotColor = enhancedGradient.length > 1 ? enhancedGradient[i % enhancedGradient.length] : color;
+    return /* @__PURE__ */ import_react.default.createElement(
+      "div",
+      {
+        key: i,
+        style: {
+          width: size * 0.2,
+          height: size * 0.2,
+          borderRadius: "50%",
+          backgroundColor: dotColor,
+          animation: `dot-bounce ${1.4}s infinite both`,
+          animationDelay: `${i * 0.16}s`,
+          boxShadow: glow ? `0 0 ${Math.round(size / 6)}px rgba(${hexToRgb(dotColor)}, ${glowIntensity})` : void 0
+        }
       }
-    }
-  )));
-  const renderWave = () => /* @__PURE__ */ import_react.default.createElement("div", { style: { display: "flex", alignItems: "end", gap: size * 0.08, height: size * 0.5 } }, [0, 1, 2, 3, 4].map((i) => /* @__PURE__ */ import_react.default.createElement(
+    );
+  }));
+  const renderWave = () => /* @__PURE__ */ import_react.default.createElement("div", { style: __spreadValues({
+    display: "flex",
+    alignItems: "flex-end",
+    justifyContent: "center",
+    gap: size * 0.08,
+    height: size * 0.8
+  }, floatingAnimation) }, Array.from({ length: 5 }, (_, i) => /* @__PURE__ */ import_react.default.createElement(
     "div",
     {
       key: i,
       style: {
         width: size * 0.12,
-        height: size * 0.5,
-        background: gradient ? `linear-gradient(135deg, ${gradient.join(", ")})` : color,
-        borderRadius: 6,
-        animation: `wave 1.2s infinite ease-in-out`,
+        height: size * 0.8,
+        backgroundColor: enhancedGradient.length > 1 ? enhancedGradient[i % enhancedGradient.length] : color,
+        borderRadius: rounded ? `${size * 0.06}px` : "2px",
+        animation: `wave ${1.2}s infinite ease-in-out`,
         animationDelay: `${i * 0.1}s`,
-        boxShadow: glow ? `0 0 8px ${color}99` : void 0
+        boxShadow: glow ? `0 0 ${Math.round(size / 6)}px rgba(${hexToRgb(color)}, ${glowIntensity})` : void 0,
+        transformOrigin: "bottom"
       }
     }
   )));
+  const renderParticles = () => /* @__PURE__ */ import_react.default.createElement(
+    "div",
+    {
+      style: __spreadValues({
+        position: "relative",
+        width: size,
+        height: size,
+        display: "inline-block"
+      }, floatingAnimation)
+    },
+    Array.from({ length: Math.min(particleCount, 4) }, (_, i) => /* @__PURE__ */ import_react.default.createElement(
+      "div",
+      {
+        key: i,
+        style: {
+          position: "absolute",
+          width: size * 0.08,
+          height: size * 0.08,
+          borderRadius: "50%",
+          backgroundColor: enhancedGradient[i % enhancedGradient.length] || color,
+          left: `${25 + i * 12}%`,
+          top: `${25 + i * 12}%`,
+          animation: `particles ${2 + i * 0.3}s infinite linear`,
+          animationDelay: `${i * 0.4}s`,
+          boxShadow: glow ? `0 0 ${size * 0.03}px currentColor` : void 0
+        }
+      }
+    )),
+    /* @__PURE__ */ import_react.default.createElement(
+      "div",
+      {
+        style: {
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: size * 0.3,
+          height: size * 0.3,
+          borderRadius: "50%",
+          backgroundColor: color,
+          animation: "pulse 2s ease-in-out infinite",
+          boxShadow: glow ? `0 0 ${size * 0.15}px rgba(${hexToRgb(color)}, ${glowIntensity})` : void 0
+        }
+      }
+    )
+  );
+  const renderSpiral = () => /* @__PURE__ */ import_react.default.createElement(
+    "div",
+    {
+      style: __spreadValues({
+        width: size,
+        height: size,
+        border: `${borderSize}px solid transparent`,
+        borderTop: `${borderSize}px solid ${color}`,
+        borderRight: `${borderSize}px solid ${accentColor}`,
+        borderRadius: "50%",
+        animation: `spin ${speed}s linear infinite`,
+        boxShadow: glow ? `0 0 ${size / 3}px rgba(${hexToRgb(color)}, ${glowIntensity})` : void 0,
+        display: "inline-block"
+      }, floatingAnimation)
+    }
+  );
+  const renderOrbit = () => /* @__PURE__ */ import_react.default.createElement(
+    "div",
+    {
+      style: __spreadValues({
+        position: "relative",
+        width: size,
+        height: size,
+        display: "inline-block"
+      }, floatingAnimation)
+    },
+    /* @__PURE__ */ import_react.default.createElement(
+      "div",
+      {
+        style: {
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          width: size * 0.3,
+          height: size * 0.3,
+          marginTop: -size * 0.15,
+          marginLeft: -size * 0.15,
+          borderRadius: "50%",
+          backgroundColor: color,
+          boxShadow: glow ? `0 0 ${size * 0.15}px ${color}` : void 0
+        }
+      }
+    ),
+    Array.from({ length: 2 }, (_, i) => /* @__PURE__ */ import_react.default.createElement(
+      "div",
+      {
+        key: i,
+        style: {
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          width: size * 0.12,
+          height: size * 0.12,
+          marginTop: -size * 0.06,
+          marginLeft: -size * 0.06,
+          borderRadius: "50%",
+          backgroundColor: enhancedGradient[i] || accentColor,
+          animation: `orbit ${2 + i}s linear infinite`,
+          animationDelay: `${i * 1}s`,
+          boxShadow: glow ? `0 0 ${size * 0.08}px currentColor` : void 0
+        }
+      }
+    ))
+  );
+  const renderPulse = () => /* @__PURE__ */ import_react.default.createElement(
+    "div",
+    {
+      style: __spreadValues({
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        backgroundColor: color,
+        animation: "pulse 1.5s infinite ease-in-out",
+        boxShadow: glow ? `0 0 ${Math.round(size / 4)}px rgba(${hexToRgb(color)}, ${glowIntensity})` : void 0,
+        display: "inline-block"
+      }, floatingAnimation)
+    }
+  );
+  const renderRipple = () => /* @__PURE__ */ import_react.default.createElement(
+    "div",
+    {
+      style: __spreadValues({
+        position: "relative",
+        width: size,
+        height: size,
+        display: "inline-block"
+      }, floatingAnimation)
+    },
+    [0, 1, 2].map((i) => /* @__PURE__ */ import_react.default.createElement(
+      "div",
+      {
+        key: i,
+        style: {
+          position: "absolute",
+          border: `${borderSize}px solid ${color}`,
+          opacity: 1,
+          borderRadius: "50%",
+          animation: `ripple 1.8s cubic-bezier(0, 0.2, 0.8, 1) infinite`,
+          animationDelay: `${i * 0.6}s`,
+          width: "100%",
+          height: "100%",
+          top: 0,
+          left: 0,
+          boxShadow: glow ? `0 0 ${Math.round(size / 5)}px rgba(${hexToRgb(color)}, ${glowIntensity / 2})` : void 0
+        }
+      }
+    )),
+    /* @__PURE__ */ import_react.default.createElement(
+      "div",
+      {
+        style: {
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: size * 0.3,
+          height: size * 0.3,
+          borderRadius: "50%",
+          backgroundColor: color,
+          boxShadow: glow ? `0 0 ${Math.round(size / 4)}px rgba(${hexToRgb(color)}, ${glowIntensity})` : void 0
+        }
+      }
+    )
+  );
+  const renderSquare = () => /* @__PURE__ */ import_react.default.createElement(
+    "div",
+    {
+      style: __spreadValues({
+        width: size * 0.8,
+        height: size * 0.8,
+        backgroundColor: color,
+        animation: "square 2s ease infinite",
+        boxShadow: glow ? `0 0 ${Math.round(size / 5)}px rgba(${hexToRgb(color)}, ${glowIntensity})` : void 0,
+        display: "inline-block"
+      }, floatingAnimation)
+    }
+  );
+  const renderInfinity = () => /* @__PURE__ */ import_react.default.createElement(
+    "div",
+    {
+      style: __spreadValues({
+        width: size * 1.2,
+        height: size * 0.6,
+        position: "relative",
+        display: "inline-block"
+      }, floatingAnimation)
+    },
+    /* @__PURE__ */ import_react.default.createElement(
+      "div",
+      {
+        style: {
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: size * 0.6,
+          height: size * 0.6,
+          border: `${borderSize}px solid ${color}`,
+          borderRadius: "50%",
+          borderRightColor: "transparent",
+          borderBottomColor: "transparent",
+          animation: "infinity 1.2s linear infinite",
+          boxShadow: glow ? `0 0 ${Math.round(size / 5)}px rgba(${hexToRgb(color)}, ${glowIntensity})` : void 0
+        }
+      }
+    ),
+    /* @__PURE__ */ import_react.default.createElement(
+      "div",
+      {
+        style: {
+          position: "absolute",
+          top: 0,
+          right: 0,
+          width: size * 0.6,
+          height: size * 0.6,
+          border: `${borderSize}px solid ${color}`,
+          borderRadius: "50%",
+          borderLeftColor: "transparent",
+          borderTopColor: "transparent",
+          animation: "infinity 1.2s linear infinite",
+          boxShadow: glow ? `0 0 ${Math.round(size / 5)}px rgba(${hexToRgb(color)}, ${glowIntensity})` : void 0
+        }
+      }
+    )
+  );
+  const renderCube = () => /* @__PURE__ */ import_react.default.createElement("div", { style: __spreadValues({
+    width: size,
+    height: size,
+    display: "inline-block"
+  }, floatingAnimation) }, /* @__PURE__ */ import_react.default.createElement("div", { style: {
+    width: size * 0.8,
+    height: size * 0.8,
+    backgroundColor: color,
+    animation: "square 2s infinite ease-in-out",
+    margin: size * 0.1,
+    boxShadow: glow ? `0 0 ${Math.round(size / 4)}px rgba(${hexToRgb(color)}, ${glowIntensity})` : void 0
+  } }));
   const renderBar = () => /* @__PURE__ */ import_react.default.createElement(
     "div",
     {
-      style: {
-        width: size * 1.2,
-        height: borderSize * 2.2,
-        background: "#e0e7ff",
-        borderRadius: borderSize,
+      style: __spreadValues({
+        width: size * 1.5,
+        height: borderSize * 3,
+        backgroundColor: secondaryColor,
+        borderRadius: rounded ? borderSize : 0,
         overflow: "hidden",
-        position: "relative"
-      }
+        position: "relative",
+        display: "inline-block"
+      }, floatingAnimation)
     },
     /* @__PURE__ */ import_react.default.createElement(
       "div",
@@ -672,34 +1267,285 @@ var Loader = ({
           position: "absolute",
           height: "100%",
           width: "40%",
-          background: gradient ? `linear-gradient(90deg, ${gradient.join(", ")})` : color,
-          borderRadius: borderSize,
+          background: enhancedGradient.length > 1 ? `linear-gradient(90deg, ${enhancedGradient.join(", ")})` : color,
+          borderRadius: rounded ? borderSize : 0,
           animation: "bar 1.2s infinite linear",
-          boxShadow: glow ? `0 0 8px ${color}99` : void 0
+          boxShadow: glow ? `0 0 ${Math.round(size / 6)}px rgba(${hexToRgb(color)}, ${glowIntensity})` : void 0
         }
       }
     )
   );
-  const renderIcon = () => icon && /* @__PURE__ */ import_react.default.createElement("div", { style: { marginBottom: 12, fontSize: size * 0.7 } }, icon);
-  const themeStyles = darkMode ? {
-    background: "linear-gradient(135deg, #23272f 0%, #2d3748 100%)",
-    color: "#e0e7ff"
+  const renderBounce = () => /* @__PURE__ */ import_react.default.createElement(
+    "div",
+    {
+      style: __spreadValues({
+        width: size * 0.8,
+        height: size * 0.8,
+        borderRadius: "50%",
+        backgroundColor: color,
+        animation: "bounce 2s infinite",
+        boxShadow: glow ? `0 0 ${Math.round(size / 4)}px rgba(${hexToRgb(color)}, ${glowIntensity})` : void 0,
+        display: "inline-block"
+      }, floatingAnimation)
+    }
+  );
+  const renderMorph = () => /* @__PURE__ */ import_react.default.createElement(
+    "div",
+    {
+      style: __spreadValues({
+        width: size * 0.8,
+        height: size * 0.8,
+        backgroundColor: color,
+        animation: "morph 3s infinite ease-in-out",
+        boxShadow: glow ? `0 0 ${Math.round(size / 4)}px rgba(${hexToRgb(color)}, ${glowIntensity})` : void 0,
+        display: "inline-block"
+      }, floatingAnimation)
+    }
+  );
+  const renderElastic = () => /* @__PURE__ */ import_react.default.createElement(
+    "div",
+    {
+      style: __spreadValues({
+        width: size * 0.8,
+        height: size * 0.8,
+        borderRadius: "50%",
+        backgroundColor: color,
+        animation: "elastic 2s infinite ease-in-out",
+        boxShadow: glow ? `0 0 ${Math.round(size / 4)}px rgba(${hexToRgb(color)}, ${glowIntensity})` : void 0,
+        display: "inline-block"
+      }, floatingAnimation)
+    }
+  );
+  const renderFlip = () => /* @__PURE__ */ import_react.default.createElement(
+    "div",
+    {
+      style: __spreadValues({
+        width: size * 0.8,
+        height: size * 0.8,
+        borderRadius: rounded ? "20%" : "8px",
+        backgroundColor: color,
+        animation: "flip 2s infinite ease-in-out",
+        boxShadow: glow ? `0 0 ${Math.round(size / 4)}px rgba(${hexToRgb(color)}, ${glowIntensity})` : void 0,
+        display: "inline-block"
+      }, floatingAnimation)
+    }
+  );
+  const renderScale = () => /* @__PURE__ */ import_react.default.createElement(
+    "div",
+    {
+      style: __spreadValues({
+        width: size * 0.8,
+        height: size * 0.8,
+        borderRadius: "50%",
+        backgroundColor: color,
+        animation: "scale 1.5s infinite ease-in-out",
+        boxShadow: glow ? `0 0 ${Math.round(size / 4)}px rgba(${hexToRgb(color)}, ${glowIntensity})` : void 0,
+        display: "inline-block"
+      }, floatingAnimation)
+    }
+  );
+  const renderNeon = () => /* @__PURE__ */ import_react.default.createElement(
+    "div",
+    {
+      style: __spreadValues({
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        border: `${borderSize}px solid ${color}`,
+        backgroundColor: "rgba(0, 0, 0, 0.1)",
+        animation: `spin ${speed}s linear infinite, neon 2s ease-in-out infinite alternate`,
+        display: "inline-block",
+        position: "relative"
+      }, floatingAnimation)
+    },
+    /* @__PURE__ */ import_react.default.createElement(
+      "div",
+      {
+        style: {
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          color,
+          fontSize: size * 0.3,
+          fontWeight: "bold",
+          animation: "neon 2s ease-in-out infinite alternate"
+        }
+      },
+      "\u26A1"
+    )
+  );
+  const validAnimations = [
+    "spin",
+    "dots",
+    "wave",
+    "bar",
+    "pulse",
+    "ripple",
+    "square",
+    "infinity",
+    "cube",
+    "spiral",
+    "orbit",
+    "bounce",
+    "morph",
+    "gradient-spin",
+    "elastic",
+    "flip",
+    "scale",
+    "particles",
+    "neon"
+  ];
+  const safeAnimationType = validAnimations.includes(animationType) ? animationType : "spin";
+  const renderLoader = () => {
+    const loaderProps = {
+      style: __spreadValues({
+        transition: smoothTransitions ? "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)" : void 0
+      }, reducedMotion ? { animationDuration: "3s" } : {})
+    };
+    switch (safeAnimationType) {
+      case "dots":
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderDots());
+      case "wave":
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderWave());
+      case "particles":
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderParticles());
+      case "spiral":
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderSpiral());
+      case "orbit":
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderOrbit());
+      case "gradient-spin":
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderGradientSpin());
+      case "pulse":
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderPulse());
+      case "ripple":
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderRipple());
+      case "square":
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderSquare());
+      case "infinity":
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderInfinity());
+      case "cube":
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderCube());
+      case "bar":
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderBar());
+      case "bounce":
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderBounce());
+      case "morph":
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderMorph());
+      case "elastic":
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderElastic());
+      case "flip":
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderFlip());
+      case "scale":
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderScale());
+      case "neon":
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderNeon());
+      case "spin":
+      default:
+        return /* @__PURE__ */ import_react.default.createElement("div", __spreadValues({}, loaderProps), renderSpinner());
+    }
+  };
+  const renderIcon = () => icon && /* @__PURE__ */ import_react.default.createElement("div", { style: __spreadProps(__spreadValues({
+    marginBottom: 16,
+    fontSize: size * 0.8,
+    color: currentTheme.highlight,
+    filter: glow ? `drop-shadow(0 0 ${Math.round(size / 12)}px rgba(${hexToRgb(color)}, ${glowIntensity}))` : void 0
+  }, floatingAnimation), {
+    animation: `${floatingAnimation.animation || ""} ${animationType === "neon" ? ", neon 2s ease-in-out infinite alternate" : ""}`
+  }) }, icon);
+  const backdropStyle = backdrop ? __spreadProps(__spreadValues({
+    backgroundColor: customTheme === "gradient" ? "transparent" : darkMode ? `#181f2a` : `#f4f6fa`
+  }, blurBackground && (glassmorphism || customTheme === "glass") ? {
+    backdropFilter: "blur(16px) saturate(180%)"
+  } : {}), {
+    background: customTheme === "gradient" ? currentTheme.background : void 0
+  }) : {};
+  const glassEffect = glassmorphism || customTheme === "glass" ? {
+    background: "rgba(255, 255, 255, 0.1)",
+    backdropFilter: "blur(20px) saturate(200%)",
+    border: "1px solid rgba(255, 255, 255, 0.2)",
+    borderRadius: "20px"
   } : {};
+  const neomorphEffect = neumorphism ? {
+    background: darkMode ? "#2d3748" : "#f0f0f0",
+    boxShadow: darkMode ? "20px 20px 40px #1a202c, -20px -20px 40px #404c64" : "20px 20px 40px #d1d1d1, -20px -20px 40px #ffffff",
+    border: "none"
+  } : {};
+  const phaseTransition = {
+    opacity: loadingPhase === "completed" ? 0 : 1,
+    transform: loadingPhase === "completing" ? "scale(1.1)" : "scale(1)",
+    transition: "all 0.8s cubic-bezier(0.4, 0, 0.2, 1)"
+  };
+  if (loadingPhase === "completed") {
+    return null;
+  }
   return /* @__PURE__ */ import_react.default.createElement(
     "div",
     {
-      style: __spreadValues(__spreadValues(__spreadValues({}, styles.loaderContainer), themeStyles), customStyle)
+      style: __spreadProps(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadProps(__spreadValues({}, styles.loaderContainer), {
+        fontFamily: font
+      }), backdropStyle), currentTheme), customStyle), phaseTransition), {
+        opacity: isVisible ? 1 : 0,
+        animation: isVisible ? `fadeIn ${fadeInDuration}ms cubic-bezier(0.4, 0, 0.2, 1)` : void 0
+      }),
+      role: accessibility ? "status" : void 0,
+      "aria-label": accessibility ? message || mergedLabels.loadingLabel : void 0,
+      "aria-live": accessibility ? "polite" : void 0
     },
-    renderIcon(),
-    animationType === "spinner" && renderSpinner(),
-    animationType === "dots" && renderDots(),
-    animationType === "wave" && renderWave(),
-    animationType === "bar" && renderBar(),
-    typeof progress === "number" && /* @__PURE__ */ import_react.default.createElement("div", { style: styles.progressText }, mergedLabels.percentLabel ? mergedLabels.percentLabel(progress) : `${progress}%`),
-    showRetries && /* @__PURE__ */ import_react.default.createElement("div", { style: styles.retryText }, mergedLabels.retryLabel, ": ", retries),
-    showNetworkInfo && /* @__PURE__ */ import_react.default.createElement("div", { style: styles.networkInfo }, /* @__PURE__ */ import_react.default.createElement("div", null, mergedLabels.speedLabel, ": ", " ", networkInfo.downlink !== null ? `${networkInfo.downlink} Mbps` : mergedLabels.gettingLabel), /* @__PURE__ */ import_react.default.createElement("div", null, mergedLabels.typeLabel, ": ", networkInfo.effectiveType), /* @__PURE__ */ import_react.default.createElement("div", null, mergedLabels.saveDataLabel, ": ", networkInfo.saveData ? mergedLabels.saveDataOn : mergedLabels.saveDataOff)),
-    message && /* @__PURE__ */ import_react.default.createElement("div", { style: styles.message }, message),
-    children
+    /* @__PURE__ */ import_react.default.createElement("div", { style: __spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadProps(__spreadValues({}, styles.contentContainer), {
+      backgroundColor: currentTheme.card,
+      boxShadow: currentTheme.shadow,
+      borderRadius: rounded ? "24px" : "8px",
+      border: `1px solid ${currentTheme.border}`
+    }), glassEffect), neomorphEffect), hoverEffects && microInteractions ? {
+      transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+      cursor: "pointer"
+    } : {}), magneticEffect ? {
+      transform: `translate(${(mousePosition.x - window.innerWidth / 2) * 0.02}px, ${(mousePosition.y - window.innerHeight / 2) * 0.02}px)`
+    } : {}) }, renderIcon(), /* @__PURE__ */ import_react.default.createElement("div", { style: __spreadProps(__spreadValues({}, styles.loaderWrapper), { position: "relative" }) }, renderLoader()), typeof progress === "number" && showPercentage && /* @__PURE__ */ import_react.default.createElement("div", { style: __spreadProps(__spreadValues({}, styles.progressText), {
+      color: currentTheme.highlight,
+      textShadow: glow ? `0 0 12px rgba(${hexToRgb(color)}, ${glowIntensity})` : void 0,
+      fontSize: "22px",
+      fontWeight: 700,
+      marginTop: 16,
+      animation: animationType === "neon" ? "neon 2s ease-in-out infinite alternate" : void 0
+    }) }, mergedLabels.percentLabel ? mergedLabels.percentLabel(progress) : `${Math.round(progress)}%`), (message || showLoadingText) && /* @__PURE__ */ import_react.default.createElement("div", { style: __spreadProps(__spreadValues({}, styles.message), {
+      color: currentTheme.text,
+      fontSize: "18px",
+      fontWeight: 500,
+      marginTop: 14,
+      maxWidth: "400px",
+      lineHeight: 1.6,
+      textAlign: "center",
+      animation: microInteractions ? "slideIn 0.6s ease-out" : void 0
+    }) }, message || `${mergedLabels.loadingLabel}...`), showRetries && retries > 0 && /* @__PURE__ */ import_react.default.createElement("div", { style: __spreadValues(__spreadProps(__spreadValues({}, styles.retryText), {
+      color: currentTheme.highlight,
+      textShadow: glow ? `0 0 10px rgba(${hexToRgb(color)}, ${glowIntensity / 2})` : void 0,
+      fontSize: "16px",
+      fontWeight: 600,
+      marginTop: 12,
+      padding: "8px 16px",
+      borderRadius: "12px",
+      background: `rgba(${hexToRgb(color)}, 0.1)`,
+      border: `1px solid rgba(${hexToRgb(color)}, 0.2)`
+    }), pulseEffect ? { animation: "pulse 2s infinite ease-in-out" } : {}) }, mergedLabels.retryLabel, ": ", retries), showNetworkInfo && /* @__PURE__ */ import_react.default.createElement("div", { style: __spreadValues(__spreadProps(__spreadValues({}, styles.networkInfo), {
+      backgroundColor: currentTheme.card,
+      color: currentTheme.textSecondary,
+      boxShadow: `0 8px 32px ${darkMode ? "rgba(0, 0, 0, 0.3)" : "rgba(0, 0, 0, 0.1)"}`,
+      borderRadius: "16px",
+      padding: "16px 24px",
+      marginTop: 20,
+      border: `1px solid ${currentTheme.border}`,
+      minWidth: "280px"
+    }), glassEffect) }, /* @__PURE__ */ import_react.default.createElement("div", { style: styles.networkInfoItem }, /* @__PURE__ */ import_react.default.createElement("span", { style: __spreadProps(__spreadValues({}, styles.networkInfoLabel), { color: currentTheme.text }) }, mergedLabels.speedLabel, ":"), /* @__PURE__ */ import_react.default.createElement("span", { style: __spreadProps(__spreadValues({}, styles.networkInfoValue), {
+      color: currentTheme.highlight,
+      fontWeight: 700
+    }) }, networkInfo.downlink !== null ? `${networkInfo.downlink} Mbps` : mergedLabels.gettingLabel)), /* @__PURE__ */ import_react.default.createElement("div", { style: styles.networkInfoItem }, /* @__PURE__ */ import_react.default.createElement("span", { style: __spreadProps(__spreadValues({}, styles.networkInfoLabel), { color: currentTheme.text }) }, mergedLabels.typeLabel, ":"), /* @__PURE__ */ import_react.default.createElement("span", { style: __spreadProps(__spreadValues({}, styles.networkInfoValue), { color: currentTheme.textSecondary }) }, networkInfo.effectiveType)), /* @__PURE__ */ import_react.default.createElement("div", { style: styles.networkInfoItem }, /* @__PURE__ */ import_react.default.createElement("span", { style: __spreadProps(__spreadValues({}, styles.networkInfoLabel), { color: currentTheme.text }) }, mergedLabels.saveDataLabel, ":"), /* @__PURE__ */ import_react.default.createElement("span", { style: __spreadProps(__spreadValues({}, styles.networkInfoValue), {
+      color: networkInfo.saveData ? darkMode ? "#10B981" : "#047857" : darkMode ? "#F87171" : "#DC2626",
+      fontWeight: 600
+    }) }, networkInfo.saveData ? mergedLabels.saveDataOn : mergedLabels.saveDataOff))), children && /* @__PURE__ */ import_react.default.createElement("div", { style: __spreadProps(__spreadValues({}, styles.childrenContainer), {
+      animation: microInteractions ? "fadeIn 0.8s ease-out 0.2s both" : void 0
+    }) }, children))
   );
 };
 var styles = {
@@ -710,66 +1556,168 @@ var styles = {
     justifyContent: "center",
     minHeight: "100vh",
     minWidth: "100vw",
-    position: "absolute",
+    position: "fixed",
     top: 0,
     left: 0,
     zIndex: 9999,
-    transition: "background 0.3s"
+    transition: "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)"
+  },
+  contentContainer: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "40px 48px",
+    maxWidth: "90%",
+    borderRadius: "24px",
+    transition: "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+    position: "relative",
+    overflow: "hidden"
+  },
+  loaderWrapper: {
+    margin: "24px 0",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative"
   },
   retryText: {
-    marginTop: 18,
-    fontSize: "18px",
-    color: "#4f8cff",
+    marginTop: 16,
+    fontSize: "16px",
     fontWeight: 600,
-    letterSpacing: 1,
-    textShadow: "0 1px 8px #b6ccff"
+    letterSpacing: "0.5px",
+    textAlign: "center"
   },
   networkInfo: {
-    marginTop: 8,
+    marginTop: 20,
     fontSize: "15px",
-    color: "#555",
     textAlign: "center",
-    background: "#f3f6ffcc",
-    borderRadius: 8,
-    padding: "8px 16px",
-    boxShadow: "0 2px 8px #e0e7ff"
+    borderRadius: "16px",
+    padding: "16px 24px",
+    width: "100%",
+    maxWidth: "320px"
+  },
+  networkInfoItem: {
+    marginBottom: 8,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  networkInfoLabel: {
+    fontWeight: 500,
+    marginRight: 12
+  },
+  networkInfoValue: {
+    fontWeight: 600,
+    textAlign: "right"
   },
   progressText: {
-    marginTop: 10,
-    fontSize: "16px",
-    color: "#4f8cff",
+    marginTop: 16,
+    fontSize: "20px",
     fontWeight: 700,
-    letterSpacing: 1
+    letterSpacing: "0.5px",
+    textAlign: "center"
   },
   message: {
-    marginTop: 14,
+    marginTop: 16,
     fontSize: "16px",
-    color: "#333",
     textAlign: "center",
-    fontWeight: 500
+    fontWeight: 500,
+    lineHeight: 1.6,
+    maxWidth: "400px"
+  },
+  childrenContainer: {
+    marginTop: 24,
+    width: "100%",
+    textAlign: "center"
   }
 };
 var LoadingSpinner_default = Loader;
 
+// src/extras.ts
+var import_react2 = __toESM(require("react"));
+function useLoaderTelemetry() {
+  const eventsRef = (0, import_react2.useRef)([]);
+  const logEvent = (0, import_react2.useCallback)((event, data) => {
+    eventsRef.current.push({ event, data, timestamp: Date.now() });
+  }, []);
+  const getMetrics = (0, import_react2.useCallback)(() => eventsRef.current.slice(), []);
+  return { logEvent, getMetrics };
+}
+var themeRegistry = {};
+function registerLoaderTheme(theme) {
+  if (!theme || !theme.name) {
+    throw new Error('registerLoaderTheme: theme must have a unique "name" field');
+  }
+  themeRegistry[theme.name] = theme;
+}
+var animationRegistry = {};
+function registerLoaderAnimation(key, component) {
+  if (!key) throw new Error("registerLoaderAnimation: key is required");
+  animationRegistry[key] = component;
+}
+function createCustomCache(impl) {
+  return impl;
+}
+var LazyLoaderErrorBoundary = class extends import_react2.default.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+    this.retry = this.retry.bind(this);
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  componentDidCatch(error, info) {
+    console.error("LazyLoaderErrorBoundary caught error:", error, info);
+  }
+  retry() {
+    this.setState({ error: null });
+  }
+  render() {
+    const { error } = this.state;
+    if (error) {
+      return this.props.fallback(error, this.retry);
+    }
+    return this.props.children;
+  }
+};
+
 // src/retry.tsx
 var defaultLFUCache = new LFUCache(5, 36e5);
-var LazyLoaderContext = (0, import_react2.createContext)({});
+var LazyLoaderContext = (0, import_react3.createContext)({});
+var LazyLoaderProvider = ({ value, children }) => /* @__PURE__ */ import_react3.default.createElement(LazyLoaderContext.Provider, { value }, children);
 function useMergedOptions(options) {
-  const contextOptions = (0, import_react2.useContext)(LazyLoaderContext);
+  const contextOptions = (0, import_react3.useContext)(LazyLoaderContext);
   return __spreadValues(__spreadValues({}, contextOptions || {}), options || {});
 }
 function useRetryDynamicImport(importFunction, options = {}) {
-  var _a, _b;
+  var _a, _b, _c;
   const mergedOptions = useMergedOptions(options);
-  const retryConfig = getConfig(mergedOptions.retry);
-  const [retryCount, setRetryCount] = (0, import_react2.useState)(0);
-  const [error, setError] = (0, import_react2.useState)(null);
-  const abortRef = (0, import_react2.useRef)(null);
-  const circuitBreaker = (0, import_react2.useRef)(new CircuitBreaker(__spreadValues(__spreadValues({}, retryConfig), mergedOptions.circuitBreaker || {})));
-  const cache = ((_a = mergedOptions.cache) == null ? void 0 : _a.customCache) || defaultLFUCache;
-  const cacheKey = ((_b = mergedOptions.cache) == null ? void 0 : _b.key) ? mergedOptions.cache.key(importFunction) : getRouteComponentUrl(importFunction);
-  const loadComponent = (0, import_react2.useCallback)(() => __async(this, null, function* () {
-    var _a2, _b2, _c, _d, _e, _f, _g, _h;
+  const retryConfig = getConfig(mergedOptions.retry || {});
+  const retryOpts = mergedOptions.retry || {};
+  const effectiveRetryCondition = retryOpts.retryCondition || retryOpts.shouldRetry;
+  const backoffMultiplier = (_a = retryOpts.backoffMultiplier) != null ? _a : 2;
+  const useJitter = retryOpts.jitter === true;
+  const [retryCount, setRetryCount] = (0, import_react3.useState)(0);
+  const [error, setError] = (0, import_react3.useState)(null);
+  const abortRef = (0, import_react3.useRef)(null);
+  const cbOverrides = mergedOptions.circuitBreaker || {};
+  const circuitBreakerConfig = __spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues({}, retryConfig), cbOverrides), cbOverrides.failureThreshold !== void 0 ? { circuitBreakerThreshold: cbOverrides.failureThreshold } : {}), cbOverrides.recoveryTimeout !== void 0 ? { resetTimeMs: cbOverrides.recoveryTimeout } : {}), cbOverrides.threshold !== void 0 ? { circuitBreakerThreshold: cbOverrides.threshold } : {}), cbOverrides.resetTime !== void 0 ? { resetTimeMs: cbOverrides.resetTime } : {});
+  const circuitBreaker = (0, import_react3.useRef)(new CircuitBreaker(circuitBreakerConfig));
+  const cache = (0, import_react3.useMemo)(() => {
+    var _a2;
+    if ((_a2 = mergedOptions.cache) == null ? void 0 : _a2.customCache) {
+      return mergedOptions.cache.customCache;
+    }
+    const cacheOptions = mergedOptions.cache || {};
+    const maxSize = cacheOptions.maxSize || 50;
+    const maxAge = cacheOptions.maxAge || 36e5;
+    return new LFUCache(maxSize, maxAge);
+  }, [mergedOptions.cache]);
+  const cacheKey = ((_b = mergedOptions.cache) == null ? void 0 : _b.key) ? mergedOptions.cache.key(importFunction) : ((_c = mergedOptions.cache) == null ? void 0 : _c.keyGenerator) ? mergedOptions.cache.keyGenerator(importFunction) : getRouteComponentUrl(importFunction);
+  const loadComponent = (0, import_react3.useCallback)(() => __async(this, null, function* () {
+    var _a2, _b2, _c2, _d, _e;
     let hasTimedOut = false;
     const { maxRetryCount, timeoutMs } = retryConfig;
     let effectiveType = "unknown", downlink = 0;
@@ -789,27 +1737,32 @@ function useRetryDynamicImport(importFunction, options = {}) {
         adjustedDelay = retryConfig.initialRetryDelayMs * 2;
       }
     }
-    if (typeof ((_c = mergedOptions.retry) == null ? void 0 : _c.customDelayFn) === "function") {
-      adjustedDelay = mergedOptions.retry.customDelayFn(retryCount, error);
+    if (typeof retryOpts.customDelayFn === "function") {
+      adjustedDelay = retryOpts.customDelayFn(retryCount, error);
     }
-    if (typeof ((_d = mergedOptions.retry) == null ? void 0 : _d.strategy) === "function") {
-      adjustedDelay = mergedOptions.retry.strategy(retryCount, error);
-    } else if (((_e = mergedOptions.retry) == null ? void 0 : _e.strategy) === "exponential") {
-      adjustedDelay = retryConfig.initialRetryDelayMs * Math.pow(2, retryCount);
-    } else if (((_f = mergedOptions.retry) == null ? void 0 : _f.strategy) === "linear") {
+    if (typeof retryOpts.strategy === "function") {
+      adjustedDelay = retryOpts.strategy(retryCount, error);
+    } else if (retryOpts.strategy === "exponential") {
+      adjustedDelay = retryConfig.initialRetryDelayMs * Math.pow(backoffMultiplier, retryCount);
+    } else if (retryOpts.strategy === "linear") {
       adjustedDelay = retryConfig.initialRetryDelayMs * (retryCount + 1);
+    }
+    if (useJitter) {
+      const jitterFactor = Math.random() * 0.4 + 0.8;
+      adjustedDelay = adjustedDelay * jitterFactor;
     }
     const importUrl = cacheKey;
     const cachedComponent = importUrl ? cache.get(importUrl) : null;
     if (cachedComponent) return Promise.resolve(cachedComponent);
-    (_g = abortRef.current) == null ? void 0 : _g.abort();
+    (_c2 = abortRef.current) == null ? void 0 : _c2.abort();
     abortRef.current = new AbortController();
     const signal = abortRef.current.signal;
-    if (((_h = mergedOptions.mock) == null ? void 0 : _h.enabled) && mergedOptions.mock.mockImport) {
+    if (((_d = mergedOptions.mock) == null ? void 0 : _d.enabled) && mergedOptions.mock.mockImport) {
       return mergedOptions.mock.mockImport();
     }
     let actualImportFunction = importFunction;
-    if (mergedOptions.importFrom && mergedOptions.importFrom !== "local") {
+    const importType = typeof mergedOptions.importFrom === "string" ? mergedOptions.importFrom : (_e = mergedOptions.importFrom) == null ? void 0 : _e.type;
+    if (importType && importType !== "local") {
     }
     const maxConcurrent = mergedOptions.maxConcurrentLoads || 4;
     return new Promise((resolve, reject) => {
@@ -830,23 +1783,27 @@ function useRetryDynamicImport(importFunction, options = {}) {
           retryImport().then((module2) => {
             var _a3, _b3;
             clearTimeout(timeoutId);
+            const isValidModule = module2 && typeof module2 === "object" && "default" in module2 && module2.default;
+            if (!isValidModule) {
+              throw new Error("Invalid module from dynamic import: missing default export");
+            }
             if (importUrl) cache.set(importUrl, module2);
             (_b3 = (_a3 = mergedOptions.retry) == null ? void 0 : _a3.onSuccess) == null ? void 0 : _b3.call(_a3, module2);
             dequeueLoad();
             resolve(module2);
           }).catch((err) => {
-            var _a3, _b3, _c2, _d2, _e2, _f2, _g2, _h2, _i;
+            var _a3, _b3, _c3, _d2, _e2, _f, _g, _h;
             (_b3 = (_a3 = mergedOptions.retry) == null ? void 0 : _a3.onRetry) == null ? void 0 : _b3.call(_a3, currentRetry, err);
             if (circuitBreaker.current.handleFailure()) {
               clearTimeout(timeoutId);
-              (_d2 = (_c2 = mergedOptions.retry) == null ? void 0 : _c2.onError) == null ? void 0 : _d2.call(_c2, err);
+              (_d2 = (_c3 = mergedOptions.retry) == null ? void 0 : _c3.onError) == null ? void 0 : _d2.call(_c3, err);
               dequeueLoad();
               reject(err);
               return;
             }
-            if (typeof ((_e2 = mergedOptions.retry) == null ? void 0 : _e2.retryCondition) === "function" && !mergedOptions.retry.retryCondition(err)) {
+            if (typeof effectiveRetryCondition === "function" && !effectiveRetryCondition(err)) {
               clearTimeout(timeoutId);
-              (_g2 = (_f2 = mergedOptions.retry) == null ? void 0 : _f2.onError) == null ? void 0 : _g2.call(_f2, err);
+              (_f = (_e2 = mergedOptions.retry) == null ? void 0 : _e2.onError) == null ? void 0 : _f.call(_e2, err);
               dequeueLoad();
               reject(err);
               return;
@@ -855,7 +1812,7 @@ function useRetryDynamicImport(importFunction, options = {}) {
               setTimeout(() => tryLoadComponent(currentRetry + 1), (currentRetry + 1) * adjustedDelay);
             } else {
               clearTimeout(timeoutId);
-              (_i = (_h2 = mergedOptions.retry) == null ? void 0 : _h2.onError) == null ? void 0 : _i.call(_h2, err);
+              (_h = (_g = mergedOptions.retry) == null ? void 0 : _g.onError) == null ? void 0 : _h.call(_g, err);
               dequeueLoad();
               reject(err);
             }
@@ -865,14 +1822,14 @@ function useRetryDynamicImport(importFunction, options = {}) {
       }, maxConcurrent);
     });
   }), [importFunction, retryConfig, mergedOptions, retryCount, error]);
-  const [Component, setComponent] = (0, import_react2.useState)(() => (0, import_react2.lazy)(loadComponent));
-  const reset = (0, import_react2.useCallback)(() => {
+  const [Component, setComponent] = (0, import_react3.useState)(() => (0, import_react3.lazy)(loadComponent));
+  const reset = (0, import_react3.useCallback)(() => {
     setRetryCount(0);
     setError(null);
-    setComponent(() => (0, import_react2.lazy)(loadComponent));
+    setComponent(() => (0, import_react3.lazy)(loadComponent));
   }, [loadComponent]);
-  const LazyWithErrorBoundary = import_react2.default.useMemo(() => {
-    return import_react2.default.lazy(
+  const LazyWithErrorBoundary = import_react3.default.useMemo(() => {
+    return import_react3.default.lazy(
       () => loadComponent().then((mod) => {
         setError(null);
         return mod;
@@ -883,7 +1840,7 @@ function useRetryDynamicImport(importFunction, options = {}) {
       })
     );
   }, [loadComponent]);
-  (0, import_react2.useEffect)(() => {
+  (0, import_react3.useEffect)(() => {
     return () => {
       var _a2;
       (_a2 = abortRef.current) == null ? void 0 : _a2.abort();
@@ -891,14 +1848,16 @@ function useRetryDynamicImport(importFunction, options = {}) {
   }, []);
   return { Component: LazyWithErrorBoundary, retryCount, error, reset };
 }
-var LoaderThemeContext = (0, import_react2.createContext)("light");
+var LoaderThemeContext = (0, import_react3.createContext)("light");
+var LoaderThemeProvider = ({ value, children }) => /* @__PURE__ */ import_react3.default.createElement(LoaderThemeContext.Provider, { value }, children);
 function useLoaderTheme(theme) {
-  const contextTheme = (0, import_react2.useContext)(LoaderThemeContext);
+  const contextTheme = (0, import_react3.useContext)(LoaderThemeContext);
   return theme || contextTheme || "light";
 }
-var LoaderAnimationRegistryContext = (0, import_react2.createContext)({});
+var LoaderAnimationRegistryContext = (0, import_react3.createContext)({});
+var LoaderAnimationRegistryProvider = ({ value, children }) => /* @__PURE__ */ import_react3.default.createElement(LoaderAnimationRegistryContext.Provider, { value }, children);
 function useLoaderAnimation(animationKey, customAnimation) {
-  const registry = (0, import_react2.useContext)(LoaderAnimationRegistryContext);
+  const registry = (0, import_react3.useContext)(LoaderAnimationRegistryContext);
   if (customAnimation) return customAnimation;
   if (animationKey && registry[animationKey]) return registry[animationKey];
   return void 0;
@@ -924,18 +1883,55 @@ var LazyLoader = (_a) => {
     size: loaderConfig.size,
     borderSize: loaderConfig.borderSize,
     color: loaderConfig.color,
+    secondaryColor: loaderConfig.secondaryColor,
+    accentColor: loaderConfig.accentColor,
+    gradient: loaderConfig.gradient,
     speed: loaderConfig.speed,
     showRetries: loaderConfig.showRetries,
     showNetworkInfo: loaderConfig.showNetworkInfo,
-    customStyle: loaderConfig.customStyle,
-    animation: loaderConfig.animation,
-    theme,
-    message: loaderConfig.loadingMessage,
+    disableNetworkInfo: loaderConfig.disableNetworkInfo,
+    customStyle: loaderConfig.customStyle || loaderConfig.style,
+    shadow: loaderConfig.shadow,
+    glow: loaderConfig.glow,
+    glowIntensity: loaderConfig.glowIntensity,
+    // Use animationType if available, otherwise fall back to animation
+    animationType: loaderConfig.animationType || loaderConfig.animation,
+    icon: loaderConfig.icon,
+    progress: loaderConfig.progress,
+    message: loaderConfig.message || loaderConfig.loadingMessage,
+    darkMode: loaderConfig.darkMode || theme === "dark",
+    labels: {},
+    blurBackground: loaderConfig.blurBackground,
+    backdrop: loaderConfig.backdrop,
+    backdropOpacity: loaderConfig.backdropOpacity,
+    font: loaderConfig.font,
+    rounded: loaderConfig.rounded,
+    floatingStyle: loaderConfig.floatingStyle,
+    pulseEffect: loaderConfig.pulseEffect || loaderConfig.pulse,
+    glassmorphism: loaderConfig.glassmorphism,
+    neumorphism: loaderConfig.neumorphism,
+    vibrantColors: loaderConfig.vibrantColors,
+    smoothTransitions: loaderConfig.smoothTransitions,
+    microInteractions: loaderConfig.microInteractions,
+    particleCount: loaderConfig.particleCount,
+    showLoadingText: loaderConfig.showLoadingText,
+    showPercentage: loaderConfig.showPercentage,
+    customTheme: loaderConfig.customTheme,
+    autoHideDelay: loaderConfig.autoHideDelay,
+    fadeInDuration: loaderConfig.fadeInDuration,
+    scaleEffect: loaderConfig.scaleEffect,
+    colorShift: loaderConfig.colorShift,
+    breathingEffect: loaderConfig.breathingEffect,
+    magneticEffect: loaderConfig.magneticEffect,
+    hoverEffects: loaderConfig.hoverEffects,
+    accessibility: loaderConfig.accessibility,
+    reducedMotion: loaderConfig.reducedMotion,
+    highContrast: loaderConfig.highContrast,
     "aria-label": loaderConfig.a11yLabel,
     role: loaderConfig.a11yRole || "status"
   };
-  const [showSpinner, setShowSpinner] = (0, import_react2.useState)(!((_a2 = loaderConfig.multiStage) == null ? void 0 : _a2.skeleton));
-  (0, import_react2.useEffect)(() => {
+  const [showSpinner, setShowSpinner] = (0, import_react3.useState)(!((_a2 = loaderConfig.multiStage) == null ? void 0 : _a2.skeleton));
+  (0, import_react3.useEffect)(() => {
     var _a3, _b3;
     if (((_a3 = loaderConfig.multiStage) == null ? void 0 : _a3.skeleton) && loaderConfig.multiStage.delay) {
       setShowSpinner(false);
@@ -948,23 +1944,23 @@ var LazyLoader = (_a) => {
   }, [loaderConfig.multiStage]);
   if (typeof window === "undefined") {
     if (loaderConfig.fallbackStrategy === "static" && loaderConfig.progressiveFallback) {
-      return /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, loaderConfig.progressiveFallback);
+      return /* @__PURE__ */ import_react3.default.createElement(import_react3.default.Fragment, null, loaderConfig.progressiveFallback);
     }
     const ssrFallback = (_b2 = mergedOptions.ssr) == null ? void 0 : _b2.fallback;
     if (ssrFallback !== void 0 && ssrFallback !== null) {
-      return /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, ssrFallback);
+      return /* @__PURE__ */ import_react3.default.createElement(import_react3.default.Fragment, null, ssrFallback);
     }
     return null;
   }
   if (error) {
     if (typeof loaderConfig.errorFallback === "function") {
-      return /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, loaderConfig.errorFallback(error, reset));
+      return /* @__PURE__ */ import_react3.default.createElement(import_react3.default.Fragment, null, loaderConfig.errorFallback(error, reset));
     }
     if (typeof loaderConfig.fallbackStrategy === "function") {
-      return /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, loaderConfig.fallbackStrategy(error));
+      return /* @__PURE__ */ import_react3.default.createElement(import_react3.default.Fragment, null, loaderConfig.fallbackStrategy(error));
     }
     if (loaderConfig.fallbackStrategy === "static" && loaderConfig.progressiveFallback) {
-      return /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, loaderConfig.progressiveFallback);
+      return /* @__PURE__ */ import_react3.default.createElement(import_react3.default.Fragment, null, loaderConfig.progressiveFallback);
     }
     if (loaderConfig.fallbackStrategy === "simple") {
       let msg = "Failed to load.";
@@ -973,12 +1969,12 @@ var LazyLoader = (_a) => {
       } else if (typeof loaderConfig.errorMessage === "string") {
         msg = loaderConfig.errorMessage;
       }
-      return /* @__PURE__ */ import_react2.default.createElement("div", null, msg);
+      return /* @__PURE__ */ import_react3.default.createElement("div", null, msg);
     }
     if (loaderConfig.fallbackStrategy === "none") {
       return null;
     }
-    return loaderConfig.fallback ? /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, loaderConfig.fallback) : /* @__PURE__ */ import_react2.default.createElement("div", { style: { textAlign: "center", padding: 24 }, role: "alert", "aria-live": "assertive" }, /* @__PURE__ */ import_react2.default.createElement("div", { style: { color: loaderConfig.errorColor || "red", marginBottom: 8 } }, loaderConfig.errorMessage ? typeof loaderConfig.errorMessage === "function" ? loaderConfig.errorMessage(error) : loaderConfig.errorMessage : `Error loading component: ${error.message}`), /* @__PURE__ */ import_react2.default.createElement(
+    return loaderConfig.fallback ? /* @__PURE__ */ import_react3.default.createElement(import_react3.default.Fragment, null, loaderConfig.fallback) : /* @__PURE__ */ import_react3.default.createElement("div", { style: { textAlign: "center", padding: 24 }, role: "alert", "aria-live": "assertive" }, /* @__PURE__ */ import_react3.default.createElement("div", { style: { color: loaderConfig.errorColor || "red", marginBottom: 8 } }, loaderConfig.errorMessage ? typeof loaderConfig.errorMessage === "function" ? loaderConfig.errorMessage(error) : loaderConfig.errorMessage : `Error loading component: ${error.message}`), /* @__PURE__ */ import_react3.default.createElement(
       "button",
       {
         onClick: reset,
@@ -990,12 +1986,12 @@ var LazyLoader = (_a) => {
   }
   if (mergedOptions.suspense === false) {
     if (((_c = loaderConfig.multiStage) == null ? void 0 : _c.skeleton) && !showSpinner) {
-      return /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, loaderConfig.multiStage.skeleton);
+      return /* @__PURE__ */ import_react3.default.createElement(import_react3.default.Fragment, null, loaderConfig.multiStage.skeleton);
     }
-    if (AnimationComponent) return /* @__PURE__ */ import_react2.default.createElement(AnimationComponent, __spreadValues({}, loaderProps));
-    return /* @__PURE__ */ import_react2.default.createElement(import_react2.default.Fragment, null, (_e = (_d = loaderConfig.customLoader) != null ? _d : fallback) != null ? _e : /* @__PURE__ */ import_react2.default.createElement(LoadingSpinner_default, __spreadValues({}, loaderProps)));
+    if (AnimationComponent) return /* @__PURE__ */ import_react3.default.createElement(AnimationComponent, __spreadValues({}, loaderProps));
+    return /* @__PURE__ */ import_react3.default.createElement(import_react3.default.Fragment, null, (_e = (_d = loaderConfig.customLoader) != null ? _d : fallback) != null ? _e : /* @__PURE__ */ import_react3.default.createElement(LoadingSpinner_default, __spreadValues({}, loaderProps)));
   }
-  (0, import_react2.useEffect)(() => {
+  (0, import_react3.useEffect)(() => {
     var _a3;
     if (((_a3 = mergedOptions.log) == null ? void 0 : _a3.enabled) && mergedOptions.log.telemetryHook) {
       mergedOptions.log.telemetryHook({ type: "mount", timestamp: Date.now() });
@@ -1007,10 +2003,32 @@ var LazyLoader = (_a) => {
       }
     };
   }, []);
-  return /* @__PURE__ */ import_react2.default.createElement(import_react2.Suspense, { fallback: ((_f = loaderConfig.multiStage) == null ? void 0 : _f.skeleton) && !showSpinner ? loaderConfig.multiStage.skeleton : AnimationComponent ? /* @__PURE__ */ import_react2.default.createElement(AnimationComponent, __spreadValues({}, loaderProps)) : fallback || loaderConfig.customLoader || /* @__PURE__ */ import_react2.default.createElement(LoadingSpinner_default, __spreadValues({}, loaderProps)) }, /* @__PURE__ */ import_react2.default.createElement(Component, __spreadValues({}, rest)));
+  return /* @__PURE__ */ import_react3.default.createElement(import_react3.Suspense, { fallback: ((_f = loaderConfig.multiStage) == null ? void 0 : _f.skeleton) && !showSpinner ? loaderConfig.multiStage.skeleton : AnimationComponent ? /* @__PURE__ */ import_react3.default.createElement(AnimationComponent, __spreadValues({}, loaderProps)) : fallback || loaderConfig.customLoader || /* @__PURE__ */ import_react3.default.createElement(LoadingSpinner_default, __spreadValues({}, loaderProps)) }, /* @__PURE__ */ import_react3.default.createElement(
+    LazyLoaderErrorBoundary,
+    {
+      fallback: (err, retryFn) => {
+        if (typeof loaderConfig.errorFallback === "function") {
+          return /* @__PURE__ */ import_react3.default.createElement(import_react3.default.Fragment, null, loaderConfig.errorFallback(err, retryFn));
+        }
+        if (typeof loaderConfig.fallbackStrategy === "function") {
+          return /* @__PURE__ */ import_react3.default.createElement(import_react3.default.Fragment, null, loaderConfig.fallbackStrategy(err));
+        }
+        return /* @__PURE__ */ import_react3.default.createElement("div", { style: { textAlign: "center", padding: 24 }, role: "alert", "aria-live": "assertive" }, /* @__PURE__ */ import_react3.default.createElement("div", { style: { color: loaderConfig.errorColor || "red", marginBottom: 8 } }, `Error loading component: ${err.message}`), /* @__PURE__ */ import_react3.default.createElement(
+          "button",
+          {
+            onClick: retryFn,
+            style: loaderConfig.retryButtonStyle || { padding: "8px 16px", borderRadius: 4, cursor: "pointer" },
+            "aria-label": loaderConfig.retryButtonText || "Retry"
+          },
+          loaderConfig.retryButtonText || "Retry"
+        ));
+      }
+    },
+    Component ? /* @__PURE__ */ import_react3.default.createElement(Component, __spreadValues({}, rest)) : null
+  ));
 };
 function retryDynamicImport(importFunction, options) {
-  return (props) => /* @__PURE__ */ import_react2.default.createElement(
+  return (props) => /* @__PURE__ */ import_react3.default.createElement(
     LazyLoader,
     __spreadValues({
       importFunction,
@@ -1019,13 +2037,13 @@ function retryDynamicImport(importFunction, options) {
   );
 }
 var prefetchDynamicImport = (importFunction, options) => {
-  var _a, _b;
+  var _a, _b, _c;
   if (!(options == null ? void 0 : options.strategy) || options.strategy === "eager") {
     const retryImport = getRetryImportFunction(importFunction, 0);
     retryImport().then((module2) => {
-      var _a2, _b2, _c;
+      var _a2, _b2, _c2;
       (_a2 = options == null ? void 0 : options.onSuccess) == null ? void 0 : _a2.call(options);
-      if (((_b2 = options == null ? void 0 : options.cache) == null ? void 0 : _b2.enabled) && ((_c = options == null ? void 0 : options.cache) == null ? void 0 : _c.key)) {
+      if (((_b2 = options == null ? void 0 : options.cache) == null ? void 0 : _b2.enabled) && ((_c2 = options == null ? void 0 : options.cache) == null ? void 0 : _c2.key)) {
         defaultLFUCache.set(options.cache.key, module2);
       }
     }).catch((error) => {
@@ -1051,7 +2069,7 @@ var prefetchDynamicImport = (importFunction, options) => {
         prefetchDynamicImport(importFunction, __spreadProps(__spreadValues({}, options), { strategy: "eager" }));
         obs.disconnect();
       }
-    });
+    }, { threshold: (_c = options.threshold) != null ? _c : 0 });
     observer.observe(el);
     return;
   }
@@ -1088,7 +2106,17 @@ function dequeueLoad() {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   LazyLoader,
+  LazyLoaderErrorBoundary,
+  LazyLoaderProvider,
+  Loader,
+  LoaderAnimationRegistryProvider,
+  LoaderThemeProvider,
+  createCustomCache,
   prefetchDynamicImport,
   priorityLoadComponent,
-  retryDynamicImport
+  registerLoaderAnimation,
+  registerLoaderTheme,
+  retryDynamicImport,
+  useLoaderTelemetry,
+  useRetryDynamicImport
 });
