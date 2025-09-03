@@ -324,7 +324,7 @@ export function useMergedOptions(options?: RetryDynamicImportOptions): RetryDyna
  * Now supports context-aware config.
  */
 export function useRetryDynamicImport(
-  importFunction: () => Promise<{ default: ComponentType<any> }>,
+  importFunction: () => Promise<any>,
   options: RetryDynamicImportOptions = {}
 ): UseRetryDynamicImportResult {
   const mergedOptions = useMergedOptions(options);
@@ -366,7 +366,7 @@ export function useRetryDynamicImport(
       ? mergedOptions.cache.keyGenerator(importFunction)
       : getRouteComponentUrl(importFunction);
 
-  const loadComponent = useCallback(async (): Promise<{ default: ComponentType<any> }> => {
+  const loadComponent = useCallback(async (): Promise<any> => {
     let hasTimedOut = false;
     const { maxRetryCount, timeoutMs } = retryConfig;
     let effectiveType = 'unknown', downlink = 0;
@@ -416,18 +416,42 @@ export function useRetryDynamicImport(
 
     // --- Remote/CDN import support ---
     let actualImportFunction = importFunction;
-    const importType = typeof mergedOptions.importFrom === 'string'
-      ? mergedOptions.importFrom
-      : mergedOptions.importFrom?.type;
+    const importFromConfig = mergedOptions.importFrom;
+    const importType = typeof importFromConfig === 'string'
+      ? importFromConfig
+      : importFromConfig?.type;
+    
     if (importType && importType !== 'local') {
-      // Example: import from CDN/remote (user must provide a compatible import function)
-      // actualImportFunction = ...
-      // For now, just use the original importFunction
+      const baseUrl = typeof importFromConfig === 'object' ? importFromConfig.baseUrl : '';
+      const fallback = typeof importFromConfig === 'object' ? importFromConfig.fallback : 'local';
+      
+      actualImportFunction = async () => {
+        try {
+          // For CDN/remote imports, we need to dynamically load the script
+          if (importType === 'cdn' && baseUrl) {
+            const moduleUrl = `${baseUrl}/${getRouteComponentUrl(importFunction)}`;
+            
+            // Create a dynamic import from the remote URL
+            const remoteModule = await import(/* webpackIgnore: true */ moduleUrl);
+            return remoteModule;
+          }
+          
+          // For other remote types, use the original function
+          return await importFunction();
+        } catch (error) {
+          // Fallback to local import if remote fails
+          if (fallback === 'local') {
+            console.warn('Remote import failed, falling back to local:', error);
+            return await importFunction();
+          }
+          throw error;
+        }
+      };
     }
 
     // --- Batching/Concurrency ---
     const maxConcurrent = mergedOptions.maxConcurrentLoads || 4;
-    return new Promise<{ default: ComponentType<any> }>((resolve, reject) => {
+    return new Promise<any>((resolve, reject) => {
       enqueueLoad(() => {
         const timeoutId = setTimeout(() => {
           hasTimedOut = true;
@@ -570,7 +594,7 @@ export const LazyLoader = ({
   fallback,
   ...rest
 }: {
-  importFunction: () => Promise<{ default: ComponentType<any> }>;
+  importFunction: () => Promise<any>;
   options?: RetryDynamicImportOptions;
   fallback?: React.ReactNode;
   [key: string]: any;
@@ -770,7 +794,7 @@ export const LazyLoader = ({
  * @returns React.FC<any>
  */
 export function retryDynamicImport(
-  importFunction: () => Promise<{ default: ComponentType<any> }>,
+  importFunction: () => Promise<any>,
   options?: RetryDynamicImportOptions
 ): React.FC<any> {
   return (props: any) => (

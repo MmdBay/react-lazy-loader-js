@@ -29,12 +29,6 @@
 npm install react-lazy-loader-js
 ```
 
-Or with yarn:
-
-```bash
-yarn add react-lazy-loader-js
-```
-
 ---
 
 ## 🚀 Quick Start
@@ -46,6 +40,7 @@ import React from 'react';
 import { retryDynamicImport, LazyLoader } from 'react-lazy-loader-js';
 
 // Simple dynamic import with retry
+// Works with any module that has a default export
 const LazyComponent = retryDynamicImport(() => import('./MyComponent'));
 
 function App() {
@@ -181,10 +176,12 @@ function App() {
 Creates a lazy React component with advanced retry and loading capabilities.
 
 **Parameters:**
-- `importFunction`: Function that returns a dynamic import promise
+- `importFunction`: Function that returns a dynamic import promise (accepts any module structure)
 - `options`: Configuration object (optional)
 
 **Returns:** A React component that can be used with React.Suspense
+
+**Note:** The `importFunction` accepts any Promise returned by dynamic import, regardless of whether the module has a default export or uses named exports. The library handles the module resolution internally.
 
 **Example:**
 ```tsx
@@ -571,6 +568,12 @@ priorityLoadComponent(() => import('./Component'), {
 />
 ```
 
+**How it works:**
+- Automatically constructs the remote URL using the component path
+- Falls back to local import if remote loading fails
+- Supports any CDN or remote module hosting
+- Uses `webpackIgnore: true` to bypass webpack's module resolution
+
 #### Mock/Test API
 
 ```tsx
@@ -873,9 +876,9 @@ const completeOptions = {
 
   // Import options
   importFrom: {
-    type: 'local',
-    baseUrl: null,
-    fallback: null,
+    type: 'local',           // 'local', 'cdn', 'remote'
+    baseUrl: null,           // Base URL for remote imports
+    fallback: 'local',       // Fallback strategy: 'local' or 'error'
   },
 
   // Mock/Test
@@ -1048,6 +1051,23 @@ const LazyComponent = retryDynamicImport(() => import('./MyComponent'), {
   log: { enabled: true, level: 'debug' },
 });
 ```
+
+#### 1.1. TypeScript Import Function Errors
+
+If you get TypeScript errors like "Property 'default' is missing", the library now supports any module structure:
+
+```tsx
+// ✅ Works with default exports
+const LazyComponent1 = retryDynamicImport(() => import('./MyComponent'));
+
+// ✅ Works with named exports  
+const LazyComponent2 = retryDynamicImport(() => import('./MyComponent'));
+
+// ✅ Works with any module structure
+const LazyComponent3 = retryDynamicImport(() => import('./MyComponent'));
+```
+
+The `importFunction` parameter accepts `() => Promise<any>` to support all module types.
 
 #### 2. Retry Not Working
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { retryDynamicImport, useRetryDynamicImport, useMergedOptions, LazyLoader } from '../retry';
 
@@ -7,7 +7,7 @@ import { retryDynamicImport, useRetryDynamicImport, useMergedOptions, LazyLoader
 jest.spyOn(console, 'log').mockImplementation();
 
 // Mock the networkSpeed module to avoid async state update warnings
-jest.mock('./networkSpeed', () => ({
+jest.mock('../networkSpeed', () => ({
   getNetworkInfo: jest.fn().mockReturnValue(Promise.resolve({
     effectiveType: '4g',
     downlink: 10,
@@ -189,6 +189,68 @@ describe('Retry Module', () => {
             options={{
               suspense: false,
               loader: { disableNetworkInfo: true }
+            }}
+          />
+        );
+      }).not.toThrow();
+    });
+
+    test('should handle CDN import configuration', () => {
+      const mockImport = jest.fn()
+        .mockResolvedValue({ default: () => <div>CDN Component</div> });
+
+      expect(() => {
+        render(
+          <LazyLoader
+            importFunction={mockImport}
+            options={{
+              suspense: false,
+              importFrom: {
+                type: 'cdn',
+                baseUrl: 'https://cdn.example.com',
+                fallback: 'local',
+              },
+              loader: { disableNetworkInfo: true, message: 'Loading from CDN...' }
+            }}
+          />
+        );
+      }).not.toThrow();
+    });
+
+    test('should handle CDN import with string type', () => {
+      const mockImport = jest.fn()
+        .mockResolvedValue({ default: () => <div>CDN Component</div> });
+
+      expect(() => {
+        render(
+          <LazyLoader
+            importFunction={mockImport}
+            options={{
+              suspense: false,
+              importFrom: 'cdn',
+              loader: { disableNetworkInfo: true, message: 'Loading from CDN...' }
+            }}
+          />
+        );
+      }).not.toThrow();
+    });
+
+    test('should handle remote import configuration', () => {
+      const mockImport = jest.fn()
+        .mockResolvedValue({ default: () => <div>Remote Component</div> });
+
+      expect(() => {
+        render(
+          <LazyLoader
+            importFunction={mockImport}
+            options={{
+              suspense: false,
+              importFrom: {
+                type: 'cdn',
+                baseUrl: 'https://invalid-cdn.com',
+                fallback: 'local',
+              },
+              loader: { disableNetworkInfo: true, message: 'Loading with fallback...' }
             }}
           />
         );
